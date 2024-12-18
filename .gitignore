@@ -17,3 +17,7 @@ install/
 # Development friendly files
 tags
 cscope*
+build.sh
+
+*.dts
+*.dtb
