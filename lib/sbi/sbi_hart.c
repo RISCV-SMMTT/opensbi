@@ -23,6 +23,7 @@
 #include <sbi/sbi_string.h>
 #include <sbi/sbi_trap.h>
 #include <sbi/sbi_hfence.h>
+#include <sbi/sbi_smmtt.h>
 
 extern void __sbi_expected_trap(void);
 extern void __sbi_expected_trap_hext(void);
@@ -680,7 +681,7 @@ const struct sbi_hart_ext_data sbi_hart_ext[] = {
 	__SBI_HART_EXT_DATA(ssccfg, SBI_HART_EXT_SSCCFG),
 	__SBI_HART_EXT_DATA(svade, SBI_HART_EXT_SVADE),
 	__SBI_HART_EXT_DATA(svadu, SBI_HART_EXT_SVADU),
-	__SBI_HART_EXT_DATA(smmtt, SBI_HART_EXT_SMSDID),
+	__SBI_HART_EXT_DATA(smsdid, SBI_HART_EXT_SMSDID),
 };
 
 _Static_assert(SBI_HART_EXT_MAX == array_size(sbi_hart_ext),
@@ -776,6 +777,7 @@ static int hart_detect_features(struct sbi_scratch *scratch)
 		sbi_scratch_offset_ptr(scratch, hart_features_offset);
 	unsigned long val, oldval;
 	bool has_zicntr = false;
+	mttp_mode_t mode, check;
 	int rc;
 
 	/* If hart features already detected then do nothing */
@@ -925,12 +927,12 @@ __pmp_skip:
 	/* Detect if hart supports smcntrpmf */
 	__check_ext_csr(SBI_HART_PRIV_VER_1_12,
 			CSR_MCYCLECFG, SBI_HART_EXT_SMCNTRPMF);
-	/* Detect if hart support sdtrig (debug triggers) */
-	__check_ext_csr(SBI_HART_PRIV_VER_UNKNOWN,
-			CSR_TSELECT, SBI_HART_EXT_SDTRIG);
 	/* Detect if hart support smsdid extension*/
 	__check_ext_csr(SBI_HART_PRIV_VER_1_12,
 			CSR_TSELECT, SBI_HART_EXT_SMSDID);
+	/* Detect if hart support sdtrig (debug triggers) */
+	__check_ext_csr(SBI_HART_PRIV_VER_UNKNOWN,
+			CSR_TSELECT, SBI_HART_EXT_SDTRIG);
 
 #undef __check_ext_csr
 
