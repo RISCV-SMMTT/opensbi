@@ -31,6 +31,7 @@
 #include <sbi/sbi_tlb.h>
 #include <sbi/sbi_version.h>
 #include <sbi/sbi_unit_test.h>
+#include <sbi/sbi_smmtt.h>
 
 #define BANNER                                              \
 	"   ____                    _____ ____ _____\n"     \
@@ -312,6 +313,12 @@ static void __noreturn init_coldboot(struct sbi_scratch *scratch, u32 hartid)
 	rc = sbi_fwft_init(scratch, true);
 	if (rc) {
 		sbi_printf("%s: fwft init failed (error %d)\n", __func__, rc);
+		sbi_hart_hang();
+	}
+
+	rc = sbi_smmtt_init(scratch, true);
+	if (rc) {
+		sbi_printf("%s: smmtt init failed (error %d)\n", __func__, rc);
 		sbi_hart_hang();
 	}
 

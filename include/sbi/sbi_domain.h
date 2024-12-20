@@ -14,6 +14,7 @@
 #include <sbi/sbi_types.h>
 #include <sbi/sbi_hartmask.h>
 #include <sbi/sbi_domain_context.h>
+#include <sbi/sbi_smmtt.h>
 
 struct sbi_scratch;
 
@@ -198,6 +199,8 @@ struct sbi_domain {
 	bool system_suspend_allowed;
 	/** Identifies whether to include the firmware region */
 	bool fw_region_inited;
+	/* Mttp mode of this domain */
+	mttp_mode_t mttp_mode;
 };
 
 /** The root domain instance */

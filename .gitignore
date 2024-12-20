@@ -19,5 +19,5 @@ tags
 cscope*
 build.sh
 
-*.dts
-*.dtb
+qemu.dtb
+rv_dtb.dtb

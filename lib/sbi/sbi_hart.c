@@ -682,6 +682,7 @@ const struct sbi_hart_ext_data sbi_hart_ext[] = {
 	__SBI_HART_EXT_DATA(svade, SBI_HART_EXT_SVADE),
 	__SBI_HART_EXT_DATA(svadu, SBI_HART_EXT_SVADU),
 	__SBI_HART_EXT_DATA(smsdid, SBI_HART_EXT_SMSDID),
+	__SBI_HART_EXT_DATA(smmtt, SBI_HART_EXT_SMMTT),
 };
 
 _Static_assert(SBI_HART_EXT_MAX == array_size(sbi_hart_ext),
@@ -929,10 +930,25 @@ __pmp_skip:
 			CSR_MCYCLECFG, SBI_HART_EXT_SMCNTRPMF);
 	/* Detect if hart support smsdid extension*/
 	__check_ext_csr(SBI_HART_PRIV_VER_1_12,
-			CSR_TSELECT, SBI_HART_EXT_SMSDID);
+			CSR_MTTP, SBI_HART_EXT_SMSDID);
 	/* Detect if hart support sdtrig (debug triggers) */
 	__check_ext_csr(SBI_HART_PRIV_VER_UNKNOWN,
 			CSR_TSELECT, SBI_HART_EXT_SDTRIG);
+
+	if(sbi_hart_has_extension(scratch, SBI_HART_EXT_SMSDID))
+	{
+		for (mode = SMMTT_BARE + 1; mode < SMMTT_MAX; mode++)
+		{
+			mttp_set(mode, 0, 0);
+			mttp_get(&check, NULL, NULL);
+			
+			if (check == mode)
+			{
+				/* support al least one mode except SMMTT_BARE*/
+				__sbi_hart_update_extension(hfeatures, SBI_HART_EXT_SMMTT, true);
+			}
+		}
+	}
 
 #undef __check_ext_csr
 

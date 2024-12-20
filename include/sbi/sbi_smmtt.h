@@ -3,6 +3,7 @@
 
 #include <sbi/sbi_const.h>
 #include <sbi/sbi_types.h>
+#include <sbi/sbi_scratch.h>
 
 typedef enum {
     SMMTT_BARE,
@@ -18,5 +19,7 @@ typedef enum {
 void mttp_set(mttp_mode_t mode, unsigned int sdid, physical_addr_t ppn);
 
 void mttp_get(mttp_mode_t* mode, unsigned int* sdid, physical_addr_t* ppn);
+
+int sbi_smmtt_init(struct sbi_scratch *scratch, bool cold_boot);
 
 #endif   // __SBI_SMMTT_H__
