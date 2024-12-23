@@ -5,16 +5,18 @@
 #include <sbi/sbi_types.h>
 #include <sbi/sbi_scratch.h>
 
-typedef enum {
+typedef int mttp_mode_t;
+
+enum {
     SMMTT_BARE,
 #if __riscv_xlen == 32
     SMMTT_34,
-#else 
+#else
     SMMTT_46,
     SMMTT_56,
 #endif
     SMMTT_MAX
-} mttp_mode_t;
+};
 
 void mttp_set(mttp_mode_t mode, unsigned int sdid, physical_addr_t ppn);
 
@@ -22,4 +24,5 @@ void mttp_get(mttp_mode_t* mode, unsigned int* sdid, physical_addr_t* ppn);
 
 int sbi_smmtt_init(struct sbi_scratch *scratch, bool cold_boot);
 
+int sbi_hart_smmtt_configure(struct sbi_scratch *scratch);
 #endif   // __SBI_SMMTT_H__

@@ -551,6 +551,19 @@ int sbi_hart_pmp_configure(struct sbi_scratch *scratch)
 		rc = sbi_hart_oldpmp_configure(scratch, pmp_count,
 						pmp_log2gran, pmp_addr_max);
 
+	return rc;
+}
+
+int sbi_hart_isolation_configure(struct sbi_scratch *scratch)
+{
+	int rc;
+
+	if (sbi_hart_has_extension(scratch, SBI_HART_EXT_SMMTT))
+		rc = sbi_hart_smmtt_configure(scratch);
+	else
+		rc = sbi_hart_pmp_configure(scratch);
+	
+
 	/*
 	 * As per section 3.7.2 of privileged specification v1.12,
 	 * virtual address translations can be speculatively performed

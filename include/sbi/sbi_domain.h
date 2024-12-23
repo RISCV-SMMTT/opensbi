@@ -18,6 +18,14 @@
 
 struct sbi_scratch;
 
+/* Domain isolation types */
+enum sbi_isolation_type {
+	SBI_ISOLATION_UNKNOWN,
+	SBI_ISOLATION_OLDPMP,
+	SBI_ISOLATION_SMEPMP,
+	SBI_ISOLATION_SMMTT,
+};
+
 /** Domain access types */
 enum sbi_domain_access {
 	SBI_DOMAIN_READ = (1UL << 0),
@@ -162,6 +170,20 @@ struct sbi_domain_memregion {
 /** Maximum number of domains */
 #define SBI_DOMAIN_MAX_INDEX			32
 
+
+
+typedef int asd;
+
+enum {
+    a,
+	b,
+	c,
+	d
+};
+
+
+
+
 /** Representation of OpenSBI domain */
 struct sbi_domain {
 	/**
@@ -201,6 +223,9 @@ struct sbi_domain {
 	bool fw_region_inited;
 	/* Mttp mode of this domain */
 	mttp_mode_t mttp_mode;
+	/* MTT table of this domain*/
+	void *mtt;
+	asd aaa;
 };
 
 /** The root domain instance */
