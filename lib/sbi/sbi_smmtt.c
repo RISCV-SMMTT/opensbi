@@ -415,7 +415,7 @@ static int setup_mtt_table()
 	order_prop = fdt_getprop(fdt, chosen_offset, "order", &len);
 	base_prop = fdt_getprop(fdt, chosen_offset, "base", &len);
 
-	smmtt_order = fdt32_to_cpu(base_prop[0]);
+	smmtt_order = fdt32_to_cpu(order_prop[0]);
 	smmtt_size = 1ULL << fdt32_to_cpu(*order_prop);
 	smmtt_base = ((uint64_t)fdt32_to_cpu(base_prop[0]) << 32) | fdt32_to_cpu(base_prop[1]);
 
