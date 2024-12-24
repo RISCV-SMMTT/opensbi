@@ -122,7 +122,7 @@ static int add_1g_region(mttl2_entry_t *entry, unsigned long flags)
 	if (entry->type == 0)
 		entry->type = type;
 	else 
-		return SBI_ENODEV;
+		return SBI_EINVAL;
 	
 	entry->info = 0;
 	entry->zero = 0;
@@ -154,7 +154,6 @@ static inline smmtt_xm_perms xm_perms_from_flags(unsigned long flags)
 
 static int add_xm_region(mttl2_entry_t *entry, unsigned long base, unsigned long flags)
 {
-
 	unsigned long offset, info, perms, field;
 
 #if __riscv_xlen == 32
@@ -165,6 +164,8 @@ static int add_xm_region(mttl2_entry_t *entry, unsigned long base, unsigned long
 
 	if (entry->type == 0)
 		entry->type = type;
+	else
+		return SBI_EINVAL;
 	offset = EXTRACT_FIELD(base, PA_XM_OFFS);
 
 	field = MTT_PERM_FIELD(offset);
@@ -337,7 +338,6 @@ static int add_mttl3_region(mttl3_entry_t *mttl3, unsigned long base,
 		mttl2_ppn = mttl3[index].mttl2_ppn;
 		mttl2 = (mttl2_entry_t *)(mttl2_ppn << PAGE_SHIFT);
 	}
-		// mttl2 = (mttl2_entry_t *)(mttl3[index].mttl2_ppn << PAGE_SHIFT);
 	
 	return add_mttl2_region(mttl2, base, order, flags);
 }
@@ -416,7 +416,7 @@ static int setup_mtt_table()
 	base_prop = fdt_getprop(fdt, chosen_offset, "base", &len);
 
 	smmtt_order = fdt32_to_cpu(order_prop[0]);
-	smmtt_size = 1ULL << fdt32_to_cpu(*order_prop);
+	smmtt_size = 1ULL << smmtt_order;
 	smmtt_base = ((uint64_t)fdt32_to_cpu(base_prop[0]) << 32) | fdt32_to_cpu(base_prop[1]);
 
 	if (smmtt_size == 0 || smmtt_base == 0)

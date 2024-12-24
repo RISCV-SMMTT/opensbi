@@ -562,7 +562,6 @@ int sbi_hart_isolation_configure(struct sbi_scratch *scratch)
 		rc = sbi_hart_smmtt_configure(scratch);
 	else
 		rc = sbi_hart_pmp_configure(scratch);
-	
 
 	/*
 	 * As per section 3.7.2 of privileged specification v1.12,
