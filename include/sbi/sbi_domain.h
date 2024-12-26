@@ -170,20 +170,6 @@ struct sbi_domain_memregion {
 /** Maximum number of domains */
 #define SBI_DOMAIN_MAX_INDEX			32
 
-
-
-typedef int asd;
-
-enum {
-    a,
-	b,
-	c,
-	d
-};
-
-
-
-
 /** Representation of OpenSBI domain */
 struct sbi_domain {
 	/**
@@ -225,7 +211,6 @@ struct sbi_domain {
 	mttp_mode_t mttp_mode;
 	/* MTT table of this domain*/
 	void *mtt;
-	asd aaa;
 };
 
 /** The root domain instance */
