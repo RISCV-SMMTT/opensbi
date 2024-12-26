@@ -209,8 +209,10 @@ struct sbi_domain {
 	bool fw_region_inited;
 	/* Mttp mode of this domain */
 	mttp_mode_t mttp_mode;
-	/* MTT table of this domain*/
+	/* MTT table of this domain */
 	void *mtt;
+	/* count the memregions this domain has */
+	u32 memregs_count;
 };
 
 /** The root domain instance */

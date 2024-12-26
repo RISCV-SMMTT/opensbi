@@ -27,7 +27,6 @@ static u32 domain_count = 0;
 static bool domain_finalized = false;
 
 #define ROOT_REGION_MAX	16
-static u32 root_memregs_count = 0;
 
 struct sbi_domain root = {
 	.name = "root",
@@ -36,6 +35,9 @@ struct sbi_domain root = {
 	.system_reset_allowed = true,
 	.system_suspend_allowed = true,
 	.fw_region_inited = false,
+	.mttp_mode = SMMTT_BARE,
+	.mtt = NULL,
+	.memregs_count = 0,
 };
 
 static unsigned long domain_hart_ptr_offset;
@@ -610,7 +612,7 @@ int sbi_domain_root_add_memregion(const struct sbi_domain_memregion *reg)
 
 	/* Sanity checks */
 	if (!reg || domain_finalized || !root.regions ||
-	    (ROOT_REGION_MAX <= root_memregs_count))
+	    (ROOT_REGION_MAX <= root.memregs_count))
 		return SBI_EINVAL;
 
 	/* Check whether compatible region exists for the new one */
@@ -620,10 +622,10 @@ int sbi_domain_root_add_memregion(const struct sbi_domain_memregion *reg)
 	}
 
 	/* Append the memregion to root memregions */
-	nreg = &root.regions[root_memregs_count];
+	nreg = &root.regions[root.memregs_count];
 	sbi_memcpy(nreg, reg, sizeof(*reg));
-	root_memregs_count++;
-	root.regions[root_memregs_count].order = 0;
+	root.memregs_count++;
+	root.regions[root.memregs_count].order = 0;
 
 	/* Sort and optimize root regions */
 	do {
@@ -654,7 +656,7 @@ int sbi_domain_root_add_memregion(const struct sbi_domain_memregion *reg)
 					nreg1++;
 				}
 				reg_merged = true;
-				root_memregs_count--;
+				root.memregs_count--;
 			}
 		}
 	} while (reg_merged);
@@ -802,13 +804,13 @@ int sbi_domain_init(struct sbi_scratch *scratch, u32 cold_hartid)
 	sbi_domain_memregion_init(scratch->fw_start, scratch->fw_rw_offset,
 				  (SBI_DOMAIN_MEMREGION_M_READABLE |
 				   SBI_DOMAIN_MEMREGION_M_EXECUTABLE),
-				  &root_memregs[root_memregs_count++]);
+				  &root_memregs[root.memregs_count++]);
 
 	sbi_domain_memregion_init((scratch->fw_start + scratch->fw_rw_offset),
 				  (scratch->fw_size - scratch->fw_rw_offset),
 				  (SBI_DOMAIN_MEMREGION_M_READABLE |
 				   SBI_DOMAIN_MEMREGION_M_WRITABLE),
-				  &root_memregs[root_memregs_count++]);
+				  &root_memregs[root.memregs_count++]);
 
 	root.fw_region_inited = true;
 
@@ -823,10 +825,10 @@ int sbi_domain_init(struct sbi_scratch *scratch, u32 cold_hartid)
 				  (SBI_DOMAIN_MEMREGION_SU_READABLE |
 				   SBI_DOMAIN_MEMREGION_SU_WRITABLE |
 				   SBI_DOMAIN_MEMREGION_SU_EXECUTABLE),
-				  &root_memregs[root_memregs_count++]);
+				  &root_memregs[root.memregs_count++]);
 
 	/* Root domain memory region end */
-	root_memregs[root_memregs_count].order = 0;
+	root_memregs[root.memregs_count].order = 0;
 
 	/* Root domain boot HART id is same as coldboot HART id */
 	root.boot_hartid = cold_hartid;
