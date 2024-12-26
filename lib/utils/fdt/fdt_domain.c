@@ -460,10 +460,11 @@ static int __fdt_parse_domain(void *fdt, int domain_offset, void *opaque)
 			continue;
 
 		val = fdt_getprop(fdt, cpu_offset, "opensbi-domain", &len);
-		if (!val || len < 4) {
-			err = SBI_EINVAL;
-			goto fail_free_all;
-		}
+		if (!val || len < 4)	continue;
+		// {
+		// 	err = SBI_EINVAL;
+		// 	goto fail_free_all;
+		// }
 
 		doffset = fdt_node_offset_by_phandle(fdt, fdt32_to_cpu(*val));
 		if (doffset < 0) {

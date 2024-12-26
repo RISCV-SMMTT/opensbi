@@ -31,6 +31,7 @@
 #include <sbi/sbi_tlb.h>
 #include <sbi/sbi_version.h>
 #include <sbi/sbi_unit_test.h>
+#include <sbi/sbi_smmtt.h>
 
 #define BANNER                                              \
 	"   ____                    _____ ____ _____\n"     \
@@ -315,6 +316,12 @@ static void __noreturn init_coldboot(struct sbi_scratch *scratch, u32 hartid)
 		sbi_hart_hang();
 	}
 
+	rc = sbi_smmtt_init(scratch, true);
+	if (rc) {
+		sbi_printf("%s: smmtt init failed (error %d)\n", __func__, rc);
+		sbi_hart_hang();
+	}
+
 	/*
 	 * Note: Finalize domains after HSM initialization so that we
 	 * can startup non-root domains.
@@ -363,9 +370,19 @@ static void __noreturn init_coldboot(struct sbi_scratch *scratch, u32 hartid)
 	 * Configure PMP at last because if SMEPMP is detected,
 	 * M-mode access to the S/U space will be rescinded.
 	 */
-	rc = sbi_hart_pmp_configure(scratch);
+	// rc = sbi_hart_pmp_configure(scratch);
+	// if (rc) {
+	// 	sbi_printf("%s: PMP configure failed (error %d)\n",
+	// 		   __func__, rc);
+	// 	sbi_hart_hang();
+	// }
+	/*
+	 * Configure hart isolation, if there is smmtt initialization,
+	 * configure smmtt, otherwise configure PMP
+	 */
+	rc = sbi_hart_isolation_configure(scratch);
 	if (rc) {
-		sbi_printf("%s: PMP configure failed (error %d)\n",
+		sbi_printf("%s: isolation configure failed (error %d)\n",
 			   __func__, rc);
 		sbi_hart_hang();
 	}
@@ -442,7 +459,7 @@ static void __noreturn init_warm_startup(struct sbi_scratch *scratch,
 	 * Configure PMP at last because if SMEPMP is detected,
 	 * M-mode access to the S/U space will be rescinded.
 	 */
-	rc = sbi_hart_pmp_configure(scratch);
+	rc = sbi_hart_isolation_configure(scratch);
 	if (rc)
 		sbi_hart_hang();
 
