@@ -327,7 +327,7 @@ int sbi_domain_register(struct sbi_domain *dom,
  * @return SBI_EALREADY if memory region conflicts with the existing one
  * @return SBI_EINVAL otherwise
  */
-int sbi_domain_root_add_memregion(const struct sbi_domain_memregion *reg);
+int sbi_domain_add_memregion(struct sbi_domain *dom, const struct sbi_domain_memregion *reg);
 
 /**
  * Add a memory range with its flags to the root domain
@@ -340,7 +340,7 @@ int sbi_domain_root_add_memregion(const struct sbi_domain_memregion *reg);
  * @return SBI_EALREADY if memory region conflicts with the existing one
  * @return SBI_EINVAL otherwise
  */
-int sbi_domain_root_add_memrange(unsigned long addr, unsigned long size,
+int sbi_domain_add_memrange(struct sbi_domain *dom, unsigned long addr, unsigned long size,
 			   unsigned long align, unsigned long region_flags);
 
 /** Finalize domain tables and startup non-root domains */

@@ -31,7 +31,8 @@ static int sophgo_sg2042_early_init(bool cold_boot,
 	 * merge them as a single domain to avoid wasting.
 	 */
 	if (cold_boot)
-		return sbi_domain_root_add_memrange(
+		return sbi_domain_add_memrange(
+					&root, 
 					(ulong)SOPHGO_SG2042_TIMER_BASE,
 					SOPHGO_SG2042_TIMER_SIZE *
 					SOPHGO_SG2042_TIMER_NUM,

@@ -80,8 +80,8 @@ int plmt_cold_timer_init(struct plmt_data *plmt)
 	int rc;
 
 	/* Add PLMT region to the root domain */
-	rc = sbi_domain_root_add_memrange(
-		(unsigned long)plmt->time_val, plmt->size,
+	rc = sbi_domain_add_memrange(
+		&root, (unsigned long)plmt->time_val, plmt->size,
 		PLMT_REGION_ALIGN,
 		SBI_DOMAIN_MEMREGION_MMIO |
 		SBI_DOMAIN_MEMREGION_M_READABLE |
