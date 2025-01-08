@@ -286,26 +286,11 @@ static void clear_region(struct sbi_domain_memregion* reg)
 	sbi_memset(reg, 0x0, sizeof(*reg));
 }
 
-static int sanitize_domain(struct sbi_domain *dom)
+static int sanitize_domain_memregion(struct sbi_domain* dom)
 {
-	u32 i, j, count;
+	u32 i, j;
 	bool is_covered;
 	struct sbi_domain_memregion *reg, *reg1;
-
-	/* Check possible HARTs */
-	if (!dom->possible_harts) {
-		sbi_printf("%s: %s possible HART mask is NULL\n",
-			   __func__, dom->name);
-		return SBI_EINVAL;
-	}
-	sbi_hartmask_for_each_hartindex(i, dom->possible_harts) {
-		if (!sbi_hartindex_valid(i)) {
-			sbi_printf("%s: %s possible HART mask has invalid "
-				   "hart %d\n", __func__,
-				   dom->name, sbi_hartindex_to_hartid(i));
-			return SBI_EINVAL;
-		}
-	}
 
 	/* Check memory regions */
 	if (!dom->regions) {
@@ -323,22 +308,10 @@ static int sanitize_domain(struct sbi_domain *dom)
 		}
 	}
 
-	/* Count memory regions */
-	count = 0;
-	sbi_domain_for_each_memregion(dom, reg)
-		count++;
-
-	/* Check presence of firmware regions */
-	if (!dom->fw_region_inited) {
-		sbi_printf("%s: %s does not have firmware region\n",
-			   __func__, dom->name);
-		return SBI_EINVAL;
-	}
-
 	/* Sort the memory regions */
-	for (i = 0; i < (count - 1); i++) {
+	for (i = 0; i < (dom->memregs_count - 1); i++) {
 		reg = &dom->regions[i];
-		for (j = i + 1; j < count; j++) {
+		for (j = i + 1; j < dom->memregs_count; j++) {
 			reg1 = &dom->regions[j];
 
 			if (!is_region_before(reg1, reg))
@@ -349,11 +322,11 @@ static int sanitize_domain(struct sbi_domain *dom)
 	}
 
 	/* Remove covered regions */
-	while(i < (count - 1)) {
+	while(i < (dom->memregs_count - 1)) {
 		is_covered = false;
 		reg = &dom->regions[i];
 
-		for (j = i + 1; j < count; j++) {
+		for (j = i + 1; j < dom->memregs_count; j++) {
 			reg1 = &dom->regions[j];
 
 			if (is_region_compatible(reg, reg1)) {
@@ -364,13 +337,44 @@ static int sanitize_domain(struct sbi_domain *dom)
 
 		/* find a region is superset of reg, remove reg */
 		if (is_covered) {
-			for (j = i; j < (count - 1); j++)
+			for (j = i; j < (dom->memregs_count - 1); j++)
 				swap_region(&dom->regions[j],
 					    &dom->regions[j + 1]);
-			clear_region(&dom->regions[count - 1]);
-			count--;
+			clear_region(&dom->regions[dom->memregs_count - 1]);
+			dom->memregs_count--;
 		} else
 			i++;
+	}
+
+	return 0;
+}
+
+static int sanitize_domain(struct sbi_domain *dom)
+{
+	u32 i;
+
+	/* Check possible HARTs */
+	if (!dom->possible_harts) {
+		sbi_printf("%s: %s possible HART mask is NULL\n",
+			   __func__, dom->name);
+		return SBI_EINVAL;
+	}
+	sbi_hartmask_for_each_hartindex(i, dom->possible_harts) {
+		if (!sbi_hartindex_valid(i)) {
+			sbi_printf("%s: %s possible HART mask has invalid "
+				   "hart %d\n", __func__,
+				   dom->name, sbi_hartindex_to_hartid(i));
+			return SBI_EINVAL;
+		}
+	}
+
+	sanitize_domain_memregion(dom);
+
+	/* Check presence of firmware regions */
+	if (!dom->fw_region_inited) {
+		sbi_printf("%s: %s does not have firmware region\n",
+			   __func__, dom->name);
+		return SBI_EINVAL;
 	}
 
 	/*
