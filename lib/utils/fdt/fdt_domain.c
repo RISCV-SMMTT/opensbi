@@ -224,7 +224,6 @@ skip_device_disable:
 
 struct parse_region_data {
 	struct sbi_domain *dom;
-	u32 region_count;
 	u32 max_regions;
 };
 
@@ -252,9 +251,9 @@ static int __fdt_parse_region(void *fdt, int domain_offset,
 		return SBI_EINVAL;
 
 	/* Find next region of the domain */
-	if (preg->max_regions <= preg->region_count)
+	if (preg->max_regions <= preg->dom->memregs_count)
 		return SBI_ENOSPC;
-	region = &preg->dom->regions[preg->region_count];
+	region = &preg->dom->regions[preg->dom->memregs_count];
 
 	/* Read "base" DT property */
 	val = fdt_getprop(fdt, region_offset, "base", &len);
@@ -278,7 +277,7 @@ static int __fdt_parse_region(void *fdt, int domain_offset,
 	if (fdt_get_property(fdt, region_offset, "mmio", NULL))
 		region->flags |= SBI_DOMAIN_MEMREGION_MMIO;
 
-	preg->region_count++;
+	preg->dom->memregs_count++;
 
 	return 0;
 }
@@ -307,7 +306,7 @@ static int __fdt_parse_domain(void *fdt, int domain_offset, void *opaque)
 		goto fail_free_domain;
 	}
 	preg.dom = dom;
-	preg.region_count = 0;
+	preg.dom->memregs_count = 0;
 	preg.max_regions = FDT_DOMAIN_REGION_MAX_COUNT;
 
 	mask = sbi_zalloc(sizeof(*mask));
@@ -366,11 +365,11 @@ static int __fdt_parse_domain(void *fdt, int domain_offset, void *opaque)
 		    (reg->flags & SBI_DOMAIN_MEMREGION_SU_WRITABLE) ||
 		    (reg->flags & SBI_DOMAIN_MEMREGION_SU_EXECUTABLE))
 			continue;
-		if (preg.max_regions <= preg.region_count) {
+		if (preg.max_regions <= preg.dom->memregs_count) {
 			err = SBI_EINVAL;
 			goto fail_free_all;
 		}
-		memcpy(&dom->regions[preg.region_count++], reg, sizeof(*reg));
+		memcpy(&dom->regions[preg.dom->memregs_count++], reg, sizeof(*reg));
 	}
 	dom->fw_region_inited = root.fw_region_inited;
 
