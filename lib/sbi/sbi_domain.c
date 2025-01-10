@@ -615,8 +615,7 @@ int sbi_domain_add_memregion(struct sbi_domain *dom, const struct sbi_domain_mem
 	struct sbi_domain_memregion *nreg, *nreg1, *nreg2;
 
 	/* Sanity checks */
-	if (!reg || domain_finalized || !dom->regions ||
-	    (REGION_MAX <= dom->memregs_count))
+	if (!reg || !dom->regions || (REGION_MAX <= dom->memregs_count))
 		return SBI_EINVAL;
 
 	/* Check whether compatible region exists for the new one */
@@ -686,7 +685,12 @@ int sbi_domain_add_memrange(struct sbi_domain *dom, unsigned long addr, unsigned
 				(end - pos) : align;
 
 		sbi_domain_memregion_init(pos, rsize, region_flags, &reg);
-		rc = sbi_domain_add_memregion(dom, &reg);
+		if (!domain_finalized)
+			rc = sbi_domain_add_memregion(dom, &reg);
+		else
+		{
+			rc = SBI_EINVAL;
+		}
 		if (rc)
 			return rc;
 		pos += rsize;

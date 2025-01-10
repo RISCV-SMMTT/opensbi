@@ -65,9 +65,9 @@ static int sbi_ecall_swth_handler(unsigned long extid, unsigned long funcid,
 			 */
 			dom = ctx->dom;
 			/* Need a new method to add dom_region after domain_finalize. */
-			// sbi_domain_add_memrange(dom, 0xb0000000, 0x1000, 0x1000, 
-			// 						SBI_DOMAIN_MEMREGION_M_READABLE |
-			// 						SBI_DOMAIN_MEMREGION_M_WRITABLE);
+			sbi_domain_add_memrange(dom, 0xb0000000, 0x1000, 0x1000, 
+									SBI_DOMAIN_MEMREGION_M_READABLE |
+									SBI_DOMAIN_MEMREGION_M_WRITABLE);
 			break;
 		case SBI_EXT_SWTH_SUBMEM:
 			break;
