@@ -413,7 +413,7 @@
 #define CSR_VSIREG6         		0x257
 
 /* Supervisor Domain Identifier Extension */
-#define CSR_MTTP				0x3E0
+#define CSR_MTTP				0x3e0
 
 /* VS-Level Interrupts (H-extension with AIA) */
 #define CSR_VSTOPEI			0x25c
@@ -884,9 +884,9 @@
 #define MTTP32_PPN_MASK       (unsigned long)0x003FFFFF
 
 #define MTTP64_MODE_MASK      (unsigned long long)0xF000000000000000
-#define MTTP64_SDID_SHIFT		54
-#define MTTP64_SDID_MASK      (unsigned long long)0x0FC0000000000000
 #define MTTP64_MODE_SHIFT		60
+#define MTTP64_SDID_MASK      (unsigned long long)0x0FC0000000000000
+#define MTTP64_SDID_SHIFT		54
 #define MTTP64_PPN_MASK       (unsigned long long)0x00000FFFFFFFFFFF
 
 #if __riscv_xlen == 32

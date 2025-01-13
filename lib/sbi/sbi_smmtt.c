@@ -386,12 +386,14 @@ int sbi_hart_smmtt_configure(struct sbi_scratch *scratch)
 	int rc;
 	struct sbi_domain *dom = sbi_domain_thishart_ptr();
 	unsigned int pmp_count = sbi_hart_pmp_count(scratch);
+
 	/* initialize MTT table */
 	rc = initialize_mtt(dom, scratch);
 	if (rc)
 		return rc;
 
-	mttp_set(SMMTT_BARE, 3, ((uintptr_t)dom->mtt) >> PAGE_SHIFT);
+	mttp_set(SMMTT_DEFAULT_MODE, dom->index, ((uintptr_t)dom->mtt) >> PAGE_SHIFT);
+
 	/* use PMP to protect MTT table */
 	pmp_set(pmp_count - 1, PMP_R | PMP_W | PMP_X, 0, __riscv_xlen);
 	pmp_set(0, 0, smmtt_base, smmtt_order);

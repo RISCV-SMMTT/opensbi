@@ -450,6 +450,9 @@ void sbi_domain_dump(const struct sbi_domain *dom, const char *suffix)
 	sbi_printf("Domain%d Boot HART   %s: %d\n",
 		   dom->index, suffix, dom->boot_hartid);
 
+	sbi_printf("Domain%d Region Count%s: %d\n",
+		   dom->index, suffix, dom->memregs_count);
+
 	k = 0;
 	sbi_printf("Domain%d HARTs       %s: ", dom->index, suffix);
 	sbi_hartmask_for_each_hartindex(i, dom->possible_harts) {
