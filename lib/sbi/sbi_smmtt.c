@@ -5,6 +5,7 @@
 #include <sbi/sbi_hart.h>
 #include <sbi/sbi_error.h>
 #include <sbi/sbi_heap.h>
+#include <sbi/sbi_types.h>
 #include <sbi/sbi_domain.h>
 #include <sbi_utils/fdt/fdt_helper.h>
 #include <libfdt.h>
@@ -12,7 +13,7 @@
 #if __riscv_xlen == 32
 
 #define SMMTT_DEFAULT_MODE (SMMTT_34)
-#define MTTL2_SIZE (0x4 * 0x400)
+#define MTTL2_SIZE (0x2 * 0x400)
 
 #else
 
@@ -33,6 +34,7 @@ void mttp_set(mttp_mode_t mode, unsigned int sdid, physical_addr_t ppn)
 	mttp	       = INSERT_FIELD(mttp, MTTP_SDID_MASK, sdid);
 	mttp	       = INSERT_FIELD(mttp, MTTP_MODE_MASK, mode);
 	csr_write(CSR_MTTP, mttp);
+	csr_write(CSR_MTTP, 0X0100000000000000);
 }
 
 void mttp_get(mttp_mode_t* mode, unsigned int* sdid, physical_addr_t* ppn)
@@ -166,7 +168,11 @@ static int add_xm_region(mttl2_entry_t *entry, unsigned long base, unsigned long
 		entry->type = type;
 	else
 		return SBI_EINVAL;
-	offset = EXTRACT_FIELD(base, PA_XM_OFFS);
+#if __riscv_xlen == 32
+	offset = EXTRACT_FIELD(base, PA32_4M_OFFS);
+#else
+	offset = EXTRACT_FIELD(base, PA64_2M_OFFS);
+#endif
 
 	field = MTT_PERM_FIELD(offset);
 	info = entry->info;
@@ -257,8 +263,13 @@ static int add_mttl1_region(mttl2_entry_t *entry, unsigned long base,
 	}
 
 	// Determine index and offset in mttl1 that this address belongs to
-	index = EXTRACT_FIELD(base, PA_PN1);
-	offset = EXTRACT_FIELD(base, PA_PN0);
+#if __riscv_xlen == 32
+	index = EXTRACT_FIELD(base, PA32_PN1);
+	offset = EXTRACT_FIELD(base, PA32_PN0);
+#else
+	index = EXTRACT_FIELD(base, PA64_PN1);
+	offset = EXTRACT_FIELD(base, PA64_PN0);
+#endif
 
 	// Generate the bitfield for the permissions and ensure it is not set
 	field = MTT_PERM_FIELD(offset);
@@ -280,7 +291,11 @@ static int add_mttl2_region(mttl2_entry_t *mttl2, unsigned long base,
 
 	while(size != 0)
 	{
-		index = EXTRACT_FIELD(base, PA_PN2);
+#if __riscv_xlen == 32
+		index = EXTRACT_FIELD(base, PA32_PN2);
+#else 
+		index = EXTRACT_FIELD(base, PA64_PN2);
+#endif
 		entry = &mttl2[index];
 		entry->zero = 0;
 
@@ -321,7 +336,7 @@ static int add_mttl3_region(mttl3_entry_t *mttl3, unsigned long base,
 {
 	unsigned long mttl2_ppn;
 	mttl2_entry_t *mttl2;
-	unsigned long index = EXTRACT_FIELD(base, PA_PN3);
+	unsigned long index = EXTRACT_FIELD(base, PA64_PN3);
 
 	if (mttl3[index].mttl2_ppn == 0)
 	{
@@ -392,7 +407,7 @@ int sbi_hart_smmtt_configure(struct sbi_scratch *scratch)
 	if (rc)
 		return rc;
 
-	mttp_set(SMMTT_DEFAULT_MODE, dom->index, ((uintptr_t)dom->mtt) >> PAGE_SHIFT);
+	mttp_set(0, dom->index, ((uintptr_t)dom->mtt) >> PAGE_SHIFT);
 
 	/* use PMP to protect MTT table */
 	pmp_set(pmp_count - 1, PMP_R | PMP_W | PMP_X, 0, __riscv_xlen);
