@@ -4,8 +4,7 @@
  * Copyright (c) 2020 Western Digital Corporation or its affiliates.
  *
  * Authors:
- *   Anup Patel <anup.patel@wdc.com>
- *   Atish Patra <atish.patra@wdc.com>
+ *   Xiao Xu <xiao_xu@mail.sdu.edu.cn>
  */
 
 #include <sbi/sbi_ecall.h>

@@ -949,6 +949,8 @@ __pmp_skip:
 
 	if(sbi_hart_has_extension(scratch, SBI_HART_EXT_SMSDID))
 	{
+		// hfeatures->sdidlen = mttp_get_sdidlen();
+
 		for (mode = SMMTT_BARE + 1; mode < SMMTT_MAX; mode++)
 		{
 			mttp_set(mode, 0, 0);
@@ -956,6 +958,8 @@ __pmp_skip:
 			
 			if (check == mode)
 			{
+				// __set_bit(mode, hfeatures->smmtt_supported_modes);
+
 				/* support al least one mode except SMMTT_BARE*/
 				__sbi_hart_update_extension(hfeatures, SBI_HART_EXT_SMMTT, true);
 			}
