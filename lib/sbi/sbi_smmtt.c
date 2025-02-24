@@ -16,6 +16,7 @@
 #include <sbi/sbi_heap.h>
 #include <sbi/sbi_types.h>
 #include <sbi/sbi_domain.h>
+#include <sbi/sbi_console.h>
 #include <sbi_utils/fdt/fdt_helper.h>
 #include <libfdt.h>
 
@@ -37,6 +38,30 @@ static struct sbi_heap_control *smmtt_hpctrl = NULL;
 static uint64_t smmtt_base, smmtt_size, smmtt_order;
 
 /* MTTP handling */
+
+unsigned int mttp_get_sdidlen()
+{
+	mttp_mode_t mode;
+	unsigned int sdid, sdidlen;
+	uintptr_t ppn;
+
+	// Save current values in mttp
+	mttp_get(&mode, &sdid, &ppn);
+
+	// Write all ones to SDID and get values back
+	mttp_set(SMMTT_BARE, (unsigned int)-1, 0);
+	mttp_get(NULL, &sdidlen, NULL);
+
+	// Reset back old values
+	mttp_set(mode, sdid, ppn);
+
+	if (sdidlen == 0) {
+		return 0;
+	} else {
+		return sbi_fls(sdidlen) + 1;
+	}
+}
+
 void mttp_set(mttp_mode_t mode, unsigned int sdid, physical_addr_t ppn)
 {
 	uintptr_t mttp = INSERT_FIELD(0, MTTP_PPN_MASK, ppn);
@@ -310,8 +335,8 @@ static int add_mttl2_region(mttl2_entry_t *mttl2, unsigned long base,
 			rc = add_xm_region(entry, base, flags);
 			if (rc)
 				return rc;
-			size -= (XM_SIZE);
-			base += (XM_SIZE);
+			size -= XM_SIZE;
+			base += XM_SIZE;
 		}
 		else
 		{
@@ -354,7 +379,8 @@ static int add_mttl3_region(mttl3_entry_t *mttl3, unsigned long base,
 
 static int initialize_mtt(struct sbi_domain *dom, struct sbi_scratch *scratch)
 {
-	int rc, level;
+	int level;
+	int rc = 0;
 	struct sbi_domain_memregion *reg;
 
 	if (!dom->mtt)
@@ -362,6 +388,10 @@ static int initialize_mtt(struct sbi_domain *dom, struct sbi_scratch *scratch)
 		if (dom->mttp_mode == SMMTT_BARE)
 		{
 			dom->mttp_mode = SMMTT_DEFAULT_MODE;
+		}
+
+		if (!sbi_hart_has_smmtt_mode(scratch, dom->mttp_mode)) {
+			return SBI_EINVAL;
 		}
 
 		rc = get_mtt_level(dom->mttp_mode, &level);
@@ -402,11 +432,11 @@ int sbi_hart_smmtt_configure(struct sbi_scratch *scratch)
 	if (rc)
 		return rc;
 
-	mttp_set(dom->mttp_mode, dom->index, ((uintptr_t)dom->mtt) >> PAGE_SHIFT);
-
 	/* use PMP to protect MTT table */
 	pmp_set(pmp_count - 1, PMP_R | PMP_W | PMP_X, 0, __riscv_xlen);
 	pmp_set(0, 0, smmtt_base, smmtt_order);
+
+	mttp_set(dom->mttp_mode, dom->index, ((uintptr_t)dom->mtt) >> PAGE_SHIFT);
 
 	return SBI_OK;
 }
@@ -441,6 +471,105 @@ static int setup_mtt_table()
 	return SBI_OK;
 }
 
+
+#define SECURE_DEVICE(status, sstatus) \
+	(!strcmp(status, "disabled") && !strcmp(sstatus, "okay"))
+
+#define NONSECURE_DEVICE(status, sstatus) \
+	(!strcmp(status, "okay") && !strcmp(sstatus, "disabled"))
+
+#define DISABLED_DEVICE(status, sstatus) \
+	(!strcmp(status, "disabled") && !strcmp(sstatus, "disabled"))
+
+#define AVAILABLE_DEVICE(status, sstatus) \
+	(!strcmp(status, "okay") && !strcmp(sstatus, "okay"))
+
+static int device_get_flags(const void *fdt, int dev, unsigned long *flags)
+{
+	const char *status, *sstatus, *name;
+
+	status = fdt_getprop(fdt, dev, "status", NULL);
+	if (!status)
+		status = "okay";
+
+	sstatus = fdt_getprop(fdt, dev, "secure-status", NULL);
+	if (!sstatus)
+		sstatus = status;
+
+	*flags = SBI_DOMAIN_MEMREGION_MMIO;
+
+	if (SECURE_DEVICE(status, sstatus) ||
+	    DISABLED_DEVICE(status, sstatus)) {
+		*flags |= (SBI_DOMAIN_MEMREGION_M_READABLE |
+			  SBI_DOMAIN_MEMREGION_M_WRITABLE);
+	} else if (NONSECURE_DEVICE(status, sstatus)) {
+		*flags |= (SBI_DOMAIN_MEMREGION_SU_READABLE |
+			  SBI_DOMAIN_MEMREGION_SU_WRITABLE);
+	} else if (AVAILABLE_DEVICE(status, sstatus)) {
+		*flags |= (SBI_DOMAIN_MEMREGION_M_READABLE |
+			  SBI_DOMAIN_MEMREGION_M_WRITABLE |
+			  SBI_DOMAIN_MEMREGION_SU_READABLE |
+			  SBI_DOMAIN_MEMREGION_SU_WRITABLE);
+	} else {
+		name = fdt_get_name(fdt, dev, NULL);
+		if (name) {
+			sbi_printf("%s: invalid security specification "
+				   "for device %s\n", __func__ , name);
+		} else {
+			sbi_printf("%s: invalid security specification\n",
+				   __func__);
+		}
+
+		return SBI_EINVAL;
+	}
+
+	return SBI_OK;
+}
+
+static int create_regions_for_devices()
+{
+	int soc, dev, ret, i;
+	uint64_t base, size;
+	unsigned long flags;
+
+	struct sbi_domain_memregion reg;
+
+	const void *fdt = fdt_get_address();
+	soc = fdt_path_offset(fdt, "/soc");
+	if (soc < 0) {
+		return SBI_EINVAL;
+	}
+
+	fdt_for_each_subnode(dev, fdt, soc) {
+		// Find all devices with MMIO ranges
+		if (fdt_get_property(fdt, dev, "reg", NULL)) {
+			// Find permissions
+			ret = device_get_flags(fdt, dev, &flags);
+			if (ret < 0) {
+				return ret;
+			}
+
+			i = 0;
+			while(1) {
+				ret = fdt_get_node_addr_size(fdt, dev, i++,
+							     &base, &size);
+				if (ret < 0) {
+					break;
+				}
+
+				sbi_domain_memregion_init(base, size, flags, &reg);
+				ret = sbi_domain_add_memregion(&root, &reg);
+				if(ret < 0) {
+					return ret;
+				}
+			}
+		}
+	}
+
+	return 0;
+}
+
+
 int sbi_smmtt_init(struct sbi_scratch *scratch, bool cold_boot)
 {
 	int rc;
@@ -450,6 +579,10 @@ int sbi_smmtt_init(struct sbi_scratch *scratch, bool cold_boot)
 	if (cold_boot)
 	{
 		rc = setup_mtt_table();
+		if (rc < 0)
+			return rc;
+	
+		rc = create_regions_for_devices();
 		if (rc < 0)
 			return rc;
 	}

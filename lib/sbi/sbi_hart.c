@@ -554,6 +554,19 @@ int sbi_hart_pmp_configure(struct sbi_scratch *scratch)
 	return rc;
 }
 
+unsigned int sbi_hart_has_smmtt_mode(struct sbi_scratch *scratch,
+	mttp_mode_t mode)
+{
+	struct sbi_hart_features *hfeatures =
+	sbi_scratch_offset_ptr(scratch, hart_features_offset);
+
+	if (!sbi_hart_has_extension(scratch, SBI_HART_EXT_SMMTT)) {
+		return 0;
+}
+
+return __test_bit(mode, hfeatures->smmtt_supported_modes);
+}
+
 int sbi_hart_isolation_configure(struct sbi_scratch *scratch)
 {
 	int rc;
@@ -940,7 +953,7 @@ __pmp_skip:
 	/* Detect if hart supports smcntrpmf */
 	__check_ext_csr(SBI_HART_PRIV_VER_1_12,
 			CSR_MCYCLECFG, SBI_HART_EXT_SMCNTRPMF);
-	/* Detect if hart support smsdid extension*/
+	/* Detect if hart support smsdid extensions*/
 	__check_ext_csr(SBI_HART_PRIV_VER_1_12,
 			CSR_MTTP, SBI_HART_EXT_SMSDID);
 	/* Detect if hart support sdtrig (debug triggers) */
@@ -949,7 +962,7 @@ __pmp_skip:
 
 	if(sbi_hart_has_extension(scratch, SBI_HART_EXT_SMSDID))
 	{
-		// hfeatures->sdidlen = mttp_get_sdidlen();
+		hfeatures->sdidlen = mttp_get_sdidlen();
 
 		for (mode = SMMTT_BARE + 1; mode < SMMTT_MAX; mode++)
 		{
@@ -958,7 +971,7 @@ __pmp_skip:
 			
 			if (check == mode)
 			{
-				// __set_bit(mode, hfeatures->smmtt_supported_modes);
+				__set_bit(mode, hfeatures->smmtt_supported_modes);
 
 				/* support al least one mode except SMMTT_BARE*/
 				__sbi_hart_update_extension(hfeatures, SBI_HART_EXT_SMMTT, true);

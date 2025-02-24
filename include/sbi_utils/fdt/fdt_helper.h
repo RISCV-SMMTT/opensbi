@@ -45,7 +45,7 @@ int fdt_parse_phandle_with_args(void *fdt, int nodeoff,
 				const char *prop, const char *cells_prop,
 				int index, struct fdt_phandle_args *out_args);
 
-int fdt_get_node_addr_size(void *fdt, int node, int index,
+int fdt_get_node_addr_size(const void *fdt, int node, int index,
 			   uint64_t *addr, uint64_t *size);
 
 int fdt_get_node_addr_size_by_name(void *fdt, int node, const char *name,

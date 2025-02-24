@@ -108,6 +108,8 @@ struct sbi_hart_features {
 	unsigned int pmp_log2gran;
 	unsigned int mhpm_mask;
 	unsigned int mhpm_bits;
+	unsigned int sdidlen;
+	unsigned long smmtt_supported_modes[BITS_TO_LONGS(SMMTT_MAX)];
 };
 
 struct sbi_scratch;
@@ -137,6 +139,8 @@ void sbi_hart_get_priv_version_str(struct sbi_scratch *scratch,
 void sbi_hart_update_extension(struct sbi_scratch *scratch,
 			       enum sbi_hart_extensions ext,
 			       bool enable);
+unsigned int sbi_hart_has_smmtt_mode(struct sbi_scratch *scratch,
+							mttp_mode_t mode);
 bool sbi_hart_has_extension(struct sbi_scratch *scratch,
 			    enum sbi_hart_extensions ext);
 void sbi_hart_get_extensions_str(struct sbi_scratch *scratch,

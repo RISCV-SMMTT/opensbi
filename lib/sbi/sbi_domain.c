@@ -17,6 +17,8 @@
 #include <sbi/sbi_platform.h>
 #include <sbi/sbi_scratch.h>
 #include <sbi/sbi_string.h>
+#include <libfdt.h>
+#include <sbi_utils/fdt/fdt_helper.h>
 
 /*
  * We allocate an extra element because sbi_domain_for_each() expects
@@ -35,7 +37,7 @@ struct sbi_domain root = {
 	.system_reset_allowed = true,
 	.system_suspend_allowed = true,
 	.fw_region_inited = false,
-	.mttp_mode = SMMTT_BARE,
+	.mttp_mode = SMMTT_46,
 	.mtt = NULL,
 	.memregs_count = 0,
 };
@@ -618,7 +620,7 @@ int sbi_domain_add_memregion(struct sbi_domain *dom, const struct sbi_domain_mem
 	struct sbi_domain_memregion *nreg, *nreg1, *nreg2;
 
 	/* Sanity checks */
-	if (!reg || !dom->regions || (REGION_MAX <= dom->memregs_count))
+	if (!reg || !dom->regions || domain_finalized || (REGION_MAX <= dom->memregs_count))
 		return SBI_EINVAL;
 
 	/* Check whether compatible region exists for the new one */
@@ -777,6 +779,7 @@ int sbi_domain_init(struct sbi_scratch *scratch, u32 cold_hartid)
 	struct sbi_hartmask *root_hmask;
 	struct sbi_domain_memregion *root_memregs;
 	const struct sbi_platform *plat = sbi_platform_ptr(scratch);
+	uint64_t base, size;
 
 	if (scratch->fw_rw_offset == 0 ||
 	    (scratch->fw_rw_offset & (scratch->fw_rw_offset - 1)) != 0) {
@@ -825,6 +828,28 @@ int sbi_domain_init(struct sbi_scratch *scratch, u32 cold_hartid)
 
 	root.fw_region_inited = true;
 
+	rc = fdt_path_offset((const void *)scratch->next_arg1, "/memory");
+	if (rc < 0) {
+		rc = SBI_ENODEV;
+		goto fail_free_root_hmask;
+	}
+
+	fdt_get_node_addr_size((void *)scratch->next_arg1, rc, 0, &base, &size);
+
+	// sbi_domain_memregion_init(base, size,
+	// 		  (SBI_DOMAIN_MEMREGION_SU_READABLE |
+	// 		   SBI_DOMAIN_MEMREGION_SU_WRITABLE |
+	// 		   SBI_DOMAIN_MEMREGION_SU_EXECUTABLE),
+	// 		  &root_memregs[root.memregs_count++]);
+
+
+	sbi_domain_memregion_init(0x80000000, 0x100000000,
+			(SBI_DOMAIN_MEMREGION_SU_READABLE |
+			SBI_DOMAIN_MEMREGION_SU_WRITABLE |
+			SBI_DOMAIN_MEMREGION_SU_EXECUTABLE),
+			&root_memregs[root.memregs_count++]);
+
+
 	/*
 	 * Allow SU RWX on rest of the memory region. Since pmp entries
 	 * have implicit priority on index, previous entries will
@@ -832,11 +857,11 @@ int sbi_domain_init(struct sbi_scratch *scratch, u32 cold_hartid)
 	 * have access to SU region while previous entries will allow
 	 * access to M-mode regions.
 	 */
-	sbi_domain_memregion_init(0, ~0UL,
-				  (SBI_DOMAIN_MEMREGION_SU_READABLE |
-				   SBI_DOMAIN_MEMREGION_SU_WRITABLE |
-				   SBI_DOMAIN_MEMREGION_SU_EXECUTABLE),
-				  &root_memregs[root.memregs_count++]);
+	// sbi_domain_memregion_init(0, ~0UL,
+	// 			  (SBI_DOMAIN_MEMREGION_SU_READABLE |
+	// 			   SBI_DOMAIN_MEMREGION_SU_WRITABLE |
+	// 			   SBI_DOMAIN_MEMREGION_SU_EXECUTABLE),
+	// 			  &root_memregs[root.memregs_count++]);
 
 	/* Root domain memory region end */
 	root_memregs[root.memregs_count].order = 0;
