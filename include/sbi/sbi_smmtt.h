@@ -15,7 +15,7 @@ typedef enum
 #if __riscv_xlen == 32
     TYPE_4M_PAGE        = 0b101,
 #else
-    TYPE_2M_PAGE        = 0b101,
+    TYPE_2M_PAGE         = 0b110,
 #endif
 } smmtt_type;
 
