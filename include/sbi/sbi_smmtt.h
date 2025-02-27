@@ -100,6 +100,33 @@ typedef struct
 
 typedef uint64_t mttl1_entry_t;
 
+/* Definitions */
+
+#define MiB (1UL << 20)
+#define GiB (1ULL << 30)
+
+#if __riscv_xlen == 32
+#define XM_SIZE (4 * MiB)
+#else
+#define XM_SIZE (2 * MiB)
+#endif
+
+#define FITS(base, size, region) \
+	(((size) >= (region)) && (!((base) % (region))))
+
+// Macro for ensuring we don't overwrite a preset field with a new value
+#define MTTL2_FIELD_ENSURE_EQUAL(entry, field, val)          \
+	if ((entry)->field == 0) {            \
+		(entry)->field = val;          \
+	} else if ((entry)->field != (val)) { \
+		return SBI_EINVAL;                               \
+	}
+
+#define ENSURE_ZERO(expr)          \
+	if ((expr) != 0) {         \
+		return SBI_EINVAL; \
+	}
+
 unsigned int mttp_get_sdidlen();
 
 void mttp_set(mttp_mode_t mode, unsigned int sdid, physical_addr_t ppn);
