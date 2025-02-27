@@ -34,8 +34,8 @@
 
 #endif
 
-static struct sbi_heap_control *smmtt_hpctrl = NULL;
-static uint64_t smmtt_table_base, smmtt_table_size;
+struct sbi_heap_control *smmtt_hpctrl = NULL;
+uint64_t smmtt_table_base, smmtt_table_size;
 
 /* Definitions */
 
@@ -168,13 +168,22 @@ static inline uint64_t mttl2_1g_type_from_flags(unsigned long flags) {
 		return TYPE_1G_DISALLOW;
 }
 
-static int add_1g_region(mttl2_entry_t *entry, unsigned long flags)
+static int add_1g_region(mttl2_entry_t *entry, unsigned long flags, bool mtt_finalized)
 {
-	smmtt_type type = mttl2_1g_type_from_flags(flags);
-	MTTL2_FIELD_ENSURE_EQUAL(entry, type, type);
+	int i;
+	for (i = 0; i < 32; i++)
+	{
+		smmtt_type type = mttl2_1g_type_from_flags(flags);
 
-	entry->info = 0;
-	entry->zero = 0;
+		if (!mtt_finalized)
+		{
+			MTTL2_FIELD_ENSURE_EQUAL(entry, type, type);
+		}
+
+		entry->info = 0;
+		entry->zero = 0;
+		entry = entry + 1;
+	}
 	return SBI_OK;
 }
 
@@ -201,7 +210,7 @@ static inline smmtt_xm_perms xm_perms_from_flags(unsigned long flags)
 		return PERMS_XM_DISALLOW;
 }
 
-static int add_xm_region(mttl2_entry_t *entry, unsigned long base, unsigned long flags)
+static int add_xm_region(mttl2_entry_t *entry, unsigned long base, unsigned long flags, bool mtt_finalized)
 {
 	unsigned long offset, info, perms, field;
 
@@ -212,7 +221,10 @@ static int add_xm_region(mttl2_entry_t *entry, unsigned long base, unsigned long
 #endif
 
 	// Ensure we're not trying to change the type of this mttl2 entry
-	MTTL2_FIELD_ENSURE_EQUAL(entry, type, type);
+	if (!mtt_finalized)
+	{
+		MTTL2_FIELD_ENSURE_EQUAL(entry, type, type);
+	}
 
 	offset = EXTRACT_FIELD(base, PA_XM_OFFS);
 	field = MTT_PERM_FIELD(offset);
@@ -280,14 +292,16 @@ static inline perms_mttl1 mttl1_perms_from_flags(unsigned long flags)
 		return PERMS_MTTL1_DISALLOWED;
 }
 
-static int add_mttl1_region(mttl2_entry_t *entry, unsigned long base,
-				  unsigned long flags)
+static int add_mttl1_region(mttl2_entry_t *entry, unsigned long base, unsigned long flags, bool mtt_finalized)
 {
 	unsigned long index, offset, field;
 	perms_mttl1 perms;
 	mttl1_entry_t *mttl1;
 
-	MTTL2_FIELD_ENSURE_EQUAL(entry, type, TYPE_MTTL1_DIR);
+	if (!mtt_finalized)
+	{
+		MTTL2_FIELD_ENSURE_EQUAL(entry, type, TYPE_MTTL1_DIR);
+	}
 
 	// Allocate or get an existing mttl1 table
 	mttl1 = mttl1_from_mttl2(entry);
@@ -316,7 +330,7 @@ static int add_mttl1_region(mttl2_entry_t *entry, unsigned long base,
 static int add_mttl2_region(mttl2_entry_t *mttl2, unsigned long base,
 				  unsigned long size, unsigned long flags)
 {
-	int rc, i;
+	int rc;
 	uintptr_t index;
 	mttl2_entry_t *entry;
 
@@ -328,18 +342,15 @@ static int add_mttl2_region(mttl2_entry_t *mttl2, unsigned long base,
 
 		if (FITS(base, size, GiB))
 		{
-			for (i = 0; i < 32; i++)
-			{
-				rc = add_1g_region(&mttl2[index + i], flags);
-				if (rc)
-					return rc;
-			}
+			rc = add_1g_region(&mttl2[index], flags, false);
+			if (rc)
+				return rc;
 			size -= GiB;
 			base += GiB;
 		}
 		else if (FITS(base, size, XM_SIZE))
 		{
-			rc = add_xm_region(entry, base, flags);
+			rc = add_xm_region(entry, base, flags, false);
 			if (rc)
 				return rc;
 			size -= XM_SIZE;
@@ -347,7 +358,7 @@ static int add_mttl2_region(mttl2_entry_t *mttl2, unsigned long base,
 		}
 		else
 		{
-			rc = add_mttl1_region(entry, base, flags);
+			rc = add_mttl1_region(entry, base, flags, false);
 			if (rc)
 				return rc;
 			size -= PAGE_SIZE;
@@ -448,7 +459,7 @@ int sbi_hart_smmtt_configure(struct sbi_scratch *scratch)
 	pmp_set(pmp_count - 1, PMP_R | PMP_W | PMP_X, 0, __riscv_xlen);
 	pmp_set(0, 0, smmtt_table_base, log2roundup(smmtt_table_size));
 
-	mttp_set(dom->mttp_mode, dom->index, ((uintptr_t)dom->mtt) >> PAGE_SHIFT);
+	mttp_set(SMMTT_BARE, dom->index, ((uintptr_t)dom->mtt) >> PAGE_SHIFT);
 
 	return SBI_OK;
 }

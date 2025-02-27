@@ -37,7 +37,7 @@ struct sbi_domain root = {
 	.system_reset_allowed = true,
 	.system_suspend_allowed = true,
 	.fw_region_inited = false,
-	.mttp_mode = SMMTT_46,
+	.mttp_mode = SMMTT_BARE,
 	.mtt = NULL,
 	.memregs_count = 0,
 };
