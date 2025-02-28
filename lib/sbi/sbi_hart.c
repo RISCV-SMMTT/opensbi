@@ -284,6 +284,19 @@ unsigned int sbi_hart_mhpm_bits(struct sbi_scratch *scratch)
 	return hfeatures->mhpm_bits;
 }
 
+unsigned int sbi_hart_has_smmtt_mode(struct sbi_scratch *scratch,
+	mttp_mode_t mode)
+{
+struct sbi_hart_features *hfeatures =
+sbi_scratch_offset_ptr(scratch, hart_features_offset);
+
+if (!sbi_hart_has_extension(scratch, SBI_HART_EXT_SMMTT)) {
+return 0;
+}
+
+return __test_bit(mode, hfeatures->smmtt_supported_modes);
+}
+
 /*
  * Returns Smepmp flags for a given domain and region based on permissions.
  */
@@ -347,6 +360,11 @@ static unsigned int sbi_hart_get_smepmp_flags(struct sbi_scratch *scratch,
 	return pmp_flags;
 }
 
+static inline bool pmp_is_power_of_two(unsigned long order, unsigned long size)
+{
+	return order == __riscv_xlen ? true : BIT(order) == size;
+}
+
 static void sbi_hart_smepmp_set(struct sbi_scratch *scratch,
 				struct sbi_domain *dom,
 				struct sbi_domain_memregion *reg,
@@ -356,14 +374,16 @@ static void sbi_hart_smepmp_set(struct sbi_scratch *scratch,
 				unsigned long pmp_addr_max)
 {
 	unsigned long pmp_addr = reg->base >> PMP_SHIFT;
+	unsigned long order = log2roundup(reg->size);
 
-	if (pmp_log2gran <= reg->order && pmp_addr < pmp_addr_max) {
-		pmp_set(pmp_idx, pmp_flags, reg->base, reg->order);
+	if (pmp_is_power_of_two(order, reg->size) &&
+	    pmp_log2gran <= order && pmp_addr < pmp_addr_max) {
+		pmp_set(pmp_idx, pmp_flags, reg->base, order);
 	} else {
 		sbi_printf("Can not configure pmp for domain %s because"
 			   " memory region address 0x%lx or size 0x%lx "
 			   "is not in range.\n", dom->name, reg->base,
-			   reg->order);
+			   reg->size);
 	}
 }
 
@@ -372,9 +392,15 @@ static int sbi_hart_smepmp_configure(struct sbi_scratch *scratch,
 				     unsigned int pmp_log2gran,
 				     unsigned long pmp_addr_max)
 {
+	int rc;
 	struct sbi_domain_memregion *reg;
 	struct sbi_domain *dom = sbi_domain_thishart_ptr();
 	unsigned int pmp_idx, pmp_flags;
+
+	rc = sbi_memregion_sanitize(dom, SBI_ISOLATION_SMEPMP);
+	if (rc < 0) {
+		return rc;
+	}
 
 	/*
 	 * Set the RLB so that, we can write to PMP entries without
@@ -447,11 +473,18 @@ static int sbi_hart_oldpmp_configure(struct sbi_scratch *scratch,
 				     unsigned int pmp_log2gran,
 				     unsigned long pmp_addr_max)
 {
+	int rc;
 	struct sbi_domain_memregion *reg;
 	struct sbi_domain *dom = sbi_domain_thishart_ptr();
 	unsigned int pmp_idx = 0;
 	unsigned int pmp_flags;
 	unsigned long pmp_addr;
+	unsigned long order;
+
+	rc = sbi_memregion_sanitize(dom, SBI_ISOLATION_PMP);
+	if (rc < 0) {
+		return rc;
+	}
 
 	sbi_domain_for_each_memregion(dom, reg) {
 		if (pmp_count <= pmp_idx)
@@ -474,13 +507,16 @@ static int sbi_hart_oldpmp_configure(struct sbi_scratch *scratch,
 			pmp_flags |= PMP_X;
 
 		pmp_addr = reg->base >> PMP_SHIFT;
-		if (pmp_log2gran <= reg->order && pmp_addr < pmp_addr_max) {
-			pmp_set(pmp_idx++, pmp_flags, reg->base, reg->order);
+		order = log2roundup(reg->size);
+
+		if (pmp_is_power_of_two(order, reg->size) &&
+		    pmp_log2gran <= order && pmp_addr < pmp_addr_max) {
+			pmp_set(pmp_idx++, pmp_flags, reg->base, order);
 		} else {
 			sbi_printf("Can not configure pmp for domain %s because"
 				   " memory region address 0x%lx or size 0x%lx "
 				   "is not in range.\n", dom->name, reg->base,
-				   reg->order);
+				   reg->size);
 		}
 	}
 
@@ -530,7 +566,7 @@ int sbi_hart_unmap_saddr(void)
 	return pmp_disable(SBI_SMEPMP_RESV_ENTRY);
 }
 
-int sbi_hart_pmp_configure(struct sbi_scratch *scratch)
+int sbi_hart_isolation_configure(struct sbi_scratch *scratch)
 {
 	int rc;
 	unsigned int pmp_bits, pmp_log2gran;
@@ -540,6 +576,9 @@ int sbi_hart_pmp_configure(struct sbi_scratch *scratch)
 	if (!pmp_count)
 		return 0;
 
+	if (sbi_hart_has_extension(scratch, SBI_HART_EXT_SMMTT)) {
+		rc = sbi_hart_smmtt_configure(scratch);
+	} else {
 	pmp_log2gran = sbi_hart_pmp_log2gran(scratch);
 	pmp_bits = sbi_hart_pmp_addrbits(scratch) - 1;
 	pmp_addr_max = (1UL << pmp_bits) | ((1UL << pmp_bits) - 1);
@@ -550,18 +589,7 @@ int sbi_hart_pmp_configure(struct sbi_scratch *scratch)
 	else
 		rc = sbi_hart_oldpmp_configure(scratch, pmp_count,
 						pmp_log2gran, pmp_addr_max);
-
-	return rc;
-}
-
-int sbi_hart_isolation_configure(struct sbi_scratch *scratch)
-{
-	int rc;
-
-	if (sbi_hart_has_extension(scratch, SBI_HART_EXT_SMMTT))
-		rc = sbi_hart_smmtt_configure(scratch);
-	else
-		rc = sbi_hart_pmp_configure(scratch);
+	}
 
 	/*
 	 * As per section 3.7.2 of privileged specification v1.12,
@@ -801,6 +829,7 @@ static int hart_detect_features(struct sbi_scratch *scratch)
 	sbi_memset(hfeatures->extensions, 0, sizeof(hfeatures->extensions));
 	hfeatures->pmp_count = 0;
 	hfeatures->mhpm_mask = 0;
+	hfeatures->sdidlen = 0;
 	hfeatures->priv_version = SBI_HART_PRIV_VER_UNKNOWN;
 
 #define __check_hpm_csr(__csr, __mask) 					  \
@@ -940,7 +969,7 @@ __pmp_skip:
 	/* Detect if hart supports smcntrpmf */
 	__check_ext_csr(SBI_HART_PRIV_VER_1_12,
 			CSR_MCYCLECFG, SBI_HART_EXT_SMCNTRPMF);
-	/* Detect if hart support smsdid extension*/
+	/* Detect if hart support smsdid extensions*/
 	__check_ext_csr(SBI_HART_PRIV_VER_1_12,
 			CSR_MTTP, SBI_HART_EXT_SMSDID);
 	/* Detect if hart support sdtrig (debug triggers) */
@@ -949,6 +978,8 @@ __pmp_skip:
 
 	if(sbi_hart_has_extension(scratch, SBI_HART_EXT_SMSDID))
 	{
+		hfeatures->sdidlen = mttp_get_sdidlen();
+
 		for (mode = SMMTT_BARE + 1; mode < SMMTT_MAX; mode++)
 		{
 			mttp_set(mode, 0, 0);
@@ -956,8 +987,12 @@ __pmp_skip:
 			
 			if (check == mode)
 			{
-				/* support al least one mode except SMMTT_BARE*/
-				__sbi_hart_update_extension(hfeatures, SBI_HART_EXT_SMMTT, true);
+				__set_bit(mode, hfeatures->smmtt_supported_modes);
+
+				// We support at least one mode besides the
+				// always-supported SMMTT_BARE
+				__sbi_hart_update_extension(
+					hfeatures, SBI_HART_EXT_SMMTT, true);
 			}
 		}
 	}

@@ -224,7 +224,7 @@ int aclint_mtimer_cold_init(struct aclint_mtimer_data *mt,
 
 	/* Add MTIMER regions to the root domain */
 	if (mt->mtime_addr == (mt->mtimecmp_addr + mt->mtimecmp_size)) {
-		rc = sbi_domain_root_add_memrange(mt->mtimecmp_addr,
+		rc = sbi_domain_add_memrange(&root, mt->mtimecmp_addr,
 					mt->mtime_size + mt->mtimecmp_size,
 					MTIMER_REGION_ALIGN,
 					(SBI_DOMAIN_MEMREGION_MMIO |
@@ -233,7 +233,7 @@ int aclint_mtimer_cold_init(struct aclint_mtimer_data *mt,
 		if (rc)
 			return rc;
 	} else if (mt->mtimecmp_addr == (mt->mtime_addr + mt->mtime_size)) {
-		rc = sbi_domain_root_add_memrange(mt->mtime_addr,
+		rc = sbi_domain_add_memrange(&root, mt->mtime_addr,
 					mt->mtime_size + mt->mtimecmp_size,
 					MTIMER_REGION_ALIGN,
 					(SBI_DOMAIN_MEMREGION_MMIO |
@@ -242,7 +242,7 @@ int aclint_mtimer_cold_init(struct aclint_mtimer_data *mt,
 		if (rc)
 			return rc;
 	} else {
-		rc = sbi_domain_root_add_memrange(mt->mtime_addr,
+		rc = sbi_domain_add_memrange(&root, mt->mtime_addr,
 						mt->mtime_size, MTIMER_REGION_ALIGN,
 						(SBI_DOMAIN_MEMREGION_MMIO |
 						 SBI_DOMAIN_MEMREGION_M_READABLE |
@@ -250,7 +250,7 @@ int aclint_mtimer_cold_init(struct aclint_mtimer_data *mt,
 		if (rc)
 			return rc;
 
-		rc = sbi_domain_root_add_memrange(mt->mtimecmp_addr,
+		rc = sbi_domain_add_memrange(&root, mt->mtimecmp_addr,
 						mt->mtimecmp_size, MTIMER_REGION_ALIGN,
 						(SBI_DOMAIN_MEMREGION_MMIO |
 						 SBI_DOMAIN_MEMREGION_M_READABLE |

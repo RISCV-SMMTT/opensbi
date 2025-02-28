@@ -122,7 +122,7 @@ int fdt_parse_phandle_with_args(void *fdt, int nodeoff,
 	return SBI_ENOENT;
 }
 
-static int fdt_translate_address(void *fdt, uint64_t reg, int parent,
+static int fdt_translate_address(const void *fdt, uint64_t reg, int parent,
 				 uint64_t *addr)
 {
 	int i, rlen;
@@ -160,7 +160,7 @@ static int fdt_translate_address(void *fdt, uint64_t reg, int parent,
 	return 0;
 }
 
-int fdt_get_node_addr_size(void *fdt, int node, int index,
+int fdt_get_node_addr_size(const void *fdt, int node, int index,
 			   uint64_t *addr, uint64_t *size)
 {
 	int parent, len, i, rc;

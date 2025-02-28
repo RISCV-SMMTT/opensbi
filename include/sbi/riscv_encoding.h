@@ -413,7 +413,7 @@
 #define CSR_VSIREG6         		0x257
 
 /* Supervisor Domain Identifier Extension */
-#define CSR_MTTP				0x3E0
+#define CSR_MTTP				0x3e0
 
 /* VS-Level Interrupts (H-extension with AIA) */
 #define CSR_VSTOPEI			0x25c
@@ -877,27 +877,27 @@
 
 /** MTTP */
 
-#define MTTP32_MODE_MASK      (unsigned long)0xC0000000
+#define MTTP32_MODE_MASK      (0x3ULL << 30)
 #define MTTP32_SDID_SHIFT		24
-#define MTTP32_SDID_MASK      (unsigned long)0x3F000000
+#define MTTP32_SDID_MASK      (0x3FULL << 24)
 #define MTTP32_MODE_SHIFT		30
-#define MTTP32_PPN_MASK       (unsigned long)0x003FFFFF
+#define MTTP32_PPN_MASK       (0x3FFFFFULL)
 
-#define MTTP64_MODE_MASK      (unsigned long long)0xF000000000000000
-#define MTTP64_SDID_SHIFT		54
-#define MTTP64_SDID_MASK      (unsigned long long)0x0FC0000000000000
+#define MTTP64_MODE_MASK      (0xFULL << 60)
 #define MTTP64_MODE_SHIFT		60
-#define MTTP64_PPN_MASK       (unsigned long long)0x00000FFFFFFFFFFF
+#define MTTP64_SDID_MASK      (0x3FULL << 54)
+#define MTTP64_SDID_SHIFT		54
+#define MTTP64_PPN_MASK       (0x00000FFFFFFFFFFFULL)
 
 #if __riscv_xlen == 32
 
 #define MTTP_MODE_MASK   MTTP32_MODE_MASK
-#define MTTP_MODE_SHIFT    MTTP32_MODE_MASK_SHIFT
+#define MTTP_MODE_SHIFT    MTTP32_MODE_SHIFT
 #define MTTP_SDID_MASK   MTTP32_SDID_MASK
 #define MTTP_SDID_SHIFT   MTTP32_SDID_SHIFT
 #define MTTP_PPN_MASK    MTTP32_PPN_MASK
 
-#else // define __SMMTT64
+#else 
 
 #define MTTP_MODE_MASK   MTTP64_MODE_MASK
 #define MTTP_MODE_SHIFT    MTTP64_MODE_SHIFT

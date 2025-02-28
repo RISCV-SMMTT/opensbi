@@ -1,3 +1,12 @@
+/*
+ * SPDX-License-Identifier: BSD-2-Clause
+ *
+ * Copyright (c) 2020 Western Digital Corporation or its affiliates.
+ *
+ * Authors:
+ *   Xiao Xu <xiao_xu@mail.sdu.edu.cn>
+ */
+
 #include <sbi/sbi_smmtt.h>
 #include <sbi/riscv_encoding.h>
 #include <sbi/sbi_bitops.h>
@@ -5,14 +14,17 @@
 #include <sbi/sbi_hart.h>
 #include <sbi/sbi_error.h>
 #include <sbi/sbi_heap.h>
+#include <sbi/sbi_types.h>
 #include <sbi/sbi_domain.h>
+#include <sbi/sbi_console.h>
 #include <sbi_utils/fdt/fdt_helper.h>
 #include <libfdt.h>
+#include <sbi/sbi_math.h>
 
 #if __riscv_xlen == 32
 
 #define SMMTT_DEFAULT_MODE (SMMTT_34)
-#define MTTL2_SIZE (0x4 * 0x400)
+#define MTTL2_SIZE (0x2 * 0x400)
 
 #else
 
@@ -22,11 +34,49 @@
 
 #endif
 
-/* Globals */
-static struct sbi_heap_control *smmtt_hpctrl = NULL;
-static uint64_t smmtt_base, smmtt_size, smmtt_order;
+struct sbi_heap_control *smmtt_hpctrl = NULL;
+uint64_t smmtt_table_base, smmtt_table_size;
+
+/* Definitions */
+
+// Macro for ensuring we don't overwrite a preset field with a new value
+#define MTTL2_FIELD_ENSURE_EQUAL(entry, field, val)          \
+	if ((entry)->field == 0) {            \
+		(entry)->field = val;          \
+	} else if ((entry)->field != (val)) { \
+		return SBI_EINVAL;                               \
+	}
+
+#define ENSURE_ZERO(expr)          \
+	if ((expr) != 0) {         \
+		return SBI_EINVAL; \
+	}
 
 /* MTTP handling */
+
+unsigned int mttp_get_sdidlen()
+{
+	mttp_mode_t mode;
+	unsigned int sdid, sdidlen;
+	uintptr_t ppn;
+
+	// Save current values in mttp
+	mttp_get(&mode, &sdid, &ppn);
+
+	// Write all ones to SDID and get values back
+	mttp_set(SMMTT_BARE, (unsigned int)-1, 0);
+	mttp_get(NULL, &sdidlen, NULL);
+
+	// Reset back old values
+	mttp_set(mode, sdid, ppn);
+
+	if (sdidlen == 0) {
+		return 0;
+	} else {
+		return sbi_fls(sdidlen) + 1;
+	}
+}
+
 void mttp_set(mttp_mode_t mode, unsigned int sdid, physical_addr_t ppn)
 {
 	uintptr_t mttp = INSERT_FIELD(0, MTTP_PPN_MASK, ppn);
@@ -35,17 +85,19 @@ void mttp_set(mttp_mode_t mode, unsigned int sdid, physical_addr_t ppn)
 	csr_write(CSR_MTTP, mttp);
 }
 
-void mttp_get(mttp_mode_t* mode, unsigned int* sdid, physical_addr_t* ppn)
+void mttp_get(mttp_mode_t *mode, unsigned int *sdid, physical_addr_t *ppn)
 {
 	uintptr_t mttp = csr_read(CSR_MTTP);
-	if(mode) {
-		*mode = (mttp & MTTP_MODE_MASK) >> MTTP_MODE_SHIFT;
+	if (mode) {
+		*mode = EXTRACT_FIELD(mttp, MTTP_MODE_MASK);
 	}
-	if(sdid) {
-		*sdid = (mttp & MTTP_SDID_MASK) >> MTTP_SDID_SHIFT;
+
+	if (sdid) {
+		*sdid = EXTRACT_FIELD(mttp, MTTP_SDID_MASK);
 	}
-	if(ppn) {
-		*ppn = (mttp & MTTP_PPN_MASK);
+
+	if (ppn) {
+		*ppn = EXTRACT_FIELD(mttp, MTTP_PPN_MASK);
 	}
 }
 
@@ -116,16 +168,22 @@ static inline uint64_t mttl2_1g_type_from_flags(unsigned long flags) {
 		return TYPE_1G_DISALLOW;
 }
 
-static int add_1g_region(mttl2_entry_t *entry, unsigned long flags)
+static int add_1g_region(mttl2_entry_t *entry, unsigned long flags, bool mtt_finalized)
 {
-	smmtt_type type = mttl2_1g_type_from_flags(flags);
-	if (entry->type == 0)
-		entry->type = type;
-	else 
-		return SBI_EINVAL;
-	
-	entry->info = 0;
-	entry->zero = 0;
+	int i;
+	for (i = 0; i < 32; i++)
+	{
+		smmtt_type type = mttl2_1g_type_from_flags(flags);
+
+		if (!mtt_finalized)
+		{
+			MTTL2_FIELD_ENSURE_EQUAL(entry, type, type);
+		}
+
+		entry->info = 0;
+		entry->zero = 0;
+		entry = entry + 1;
+	}
 	return SBI_OK;
 }
 
@@ -152,7 +210,7 @@ static inline smmtt_xm_perms xm_perms_from_flags(unsigned long flags)
 		return PERMS_XM_DISALLOW;
 }
 
-static int add_xm_region(mttl2_entry_t *entry, unsigned long base, unsigned long flags)
+static int add_xm_region(mttl2_entry_t *entry, unsigned long base, unsigned long flags, bool mtt_finalized)
 {
 	unsigned long offset, info, perms, field;
 
@@ -162,16 +220,16 @@ static int add_xm_region(mttl2_entry_t *entry, unsigned long base, unsigned long
 	smmtt_type type = TYPE_2M_PAGE;
 #endif
 
-	if (entry->type == 0)
-		entry->type = type;
-	else
-		return SBI_EINVAL;
-	offset = EXTRACT_FIELD(base, PA_XM_OFFS);
+	// Ensure we're not trying to change the type of this mttl2 entry
+	if (!mtt_finalized)
+	{
+		MTTL2_FIELD_ENSURE_EQUAL(entry, type, type);
+	}
 
+	offset = EXTRACT_FIELD(base, PA_XM_OFFS);
 	field = MTT_PERM_FIELD(offset);
 	info = entry->info;
-	if (EXTRACT_FIELD(entry->info, field) != 0)
-		return SBI_EINVAL;	
+	ENSURE_ZERO(EXTRACT_FIELD(entry->info, field));
 
 	perms = xm_perms_from_flags(flags);
 	info = INSERT_FIELD(info, field, perms);
@@ -234,17 +292,16 @@ static inline perms_mttl1 mttl1_perms_from_flags(unsigned long flags)
 		return PERMS_MTTL1_DISALLOWED;
 }
 
-static int add_mttl1_region(mttl2_entry_t *entry, unsigned long base,
-				  unsigned long flags)
+static int add_mttl1_region(mttl2_entry_t *entry, unsigned long base, unsigned long flags, bool mtt_finalized)
 {
 	unsigned long index, offset, field;
 	perms_mttl1 perms;
 	mttl1_entry_t *mttl1;
 
-	if (entry->type == 0)
-		entry->type = TYPE_MTTL1_DIR;
-	else
-		return SBI_EINVAL;
+	if (!mtt_finalized)
+	{
+		MTTL2_FIELD_ENSURE_EQUAL(entry, type, TYPE_MTTL1_DIR);
+	}
 
 	// Allocate or get an existing mttl1 table
 	mttl1 = mttl1_from_mttl2(entry);
@@ -262,8 +319,7 @@ static int add_mttl1_region(mttl2_entry_t *entry, unsigned long base,
 
 	// Generate the bitfield for the permissions and ensure it is not set
 	field = MTT_PERM_FIELD(offset);
-	if (EXTRACT_FIELD(mttl1[index], field) != 0)
-		return SBI_EINVAL;
+	ENSURE_ZERO(EXTRACT_FIELD(mttl1[index], field));
 
 	// Set the new permissions
 	perms = mttl1_perms_from_flags(flags);
@@ -271,11 +327,11 @@ static int add_mttl1_region(mttl2_entry_t *entry, unsigned long base,
 	return SBI_OK;
 }
 
-static int add_mttl2_region(mttl2_entry_t *mttl2, unsigned long base, 
-			unsigned long order, unsigned long flags)
+static int add_mttl2_region(mttl2_entry_t *mttl2, unsigned long base,
+				  unsigned long size, unsigned long flags)
 {
-	int i, rc;
-	unsigned long index, size = (order == __riscv_xlen) ? -1UL : BIT(order);
+	int rc;
+	uintptr_t index;
 	mttl2_entry_t *entry;
 
 	while(size != 0)
@@ -286,26 +342,23 @@ static int add_mttl2_region(mttl2_entry_t *mttl2, unsigned long base,
 
 		if (FITS(base, size, GiB))
 		{
-			for (i = 0; i < 32; i++)
-			{
-				rc = add_1g_region(&mttl2[index + i], flags);
-				if (rc)
-					return rc;
-			}
+			rc = add_1g_region(&mttl2[index], flags, false);
+			if (rc)
+				return rc;
 			size -= GiB;
 			base += GiB;
 		}
 		else if (FITS(base, size, XM_SIZE))
 		{
-			rc = add_xm_region(entry, base, flags);
+			rc = add_xm_region(entry, base, flags, false);
 			if (rc)
 				return rc;
-			size -= (XM_SIZE);
-			base += (XM_SIZE);
+			size -= XM_SIZE;
+			base += XM_SIZE;
 		}
 		else
 		{
-			rc = add_mttl1_region(entry, base, flags);
+			rc = add_mttl1_region(entry, base, flags, false);
 			if (rc)
 				return rc;
 			size -= PAGE_SIZE;
@@ -316,8 +369,9 @@ static int add_mttl2_region(mttl2_entry_t *mttl2, unsigned long base,
 	return rc;
 }
 
-static int add_mttl3_region(mttl3_entry_t *mttl3, unsigned long base, 
-			unsigned long order, unsigned long flags)
+#if __riscv_xlen == 64
+static int add_mttl3_region(mttl3_entry_t *mttl3, unsigned long base,
+				  unsigned long size, unsigned long flags)
 {
 	unsigned long mttl2_ppn;
 	mttl2_entry_t *mttl2;
@@ -326,7 +380,7 @@ static int add_mttl3_region(mttl3_entry_t *mttl3, unsigned long base,
 	if (mttl3[index].mttl2_ppn == 0)
 	{
 		mttl2 = sbi_aligned_alloc_from(smmtt_hpctrl, MTTL2_SIZE, MTTL2_SIZE);
-		
+
 		if (!mttl2)
 			return SBI_ENOMEM;
 
@@ -339,12 +393,14 @@ static int add_mttl3_region(mttl3_entry_t *mttl3, unsigned long base,
 		mttl2 = (mttl2_entry_t *)(mttl2_ppn << PAGE_SHIFT);
 	}
 	
-	return add_mttl2_region(mttl2, base, order, flags);
+	return add_mttl2_region(mttl2, base, size, flags);
 }
+#endif
 
 static int initialize_mtt(struct sbi_domain *dom, struct sbi_scratch *scratch)
 {
-	int rc, level;
+	int level;
+	int rc = 0;
 	struct sbi_domain_memregion *reg;
 
 	if (!dom->mtt)
@@ -352,6 +408,10 @@ static int initialize_mtt(struct sbi_domain *dom, struct sbi_scratch *scratch)
 		if (dom->mttp_mode == SMMTT_BARE)
 		{
 			dom->mttp_mode = SMMTT_DEFAULT_MODE;
+		}
+
+		if (!sbi_hart_has_smmtt_mode(scratch, dom->mttp_mode)) {
+			return SBI_EINVAL;
 		}
 
 		rc = get_mtt_level(dom->mttp_mode, &level);
@@ -371,10 +431,13 @@ static int initialize_mtt(struct sbi_domain *dom, struct sbi_scratch *scratch)
 			if (!(reg->flags & SBI_DOMAIN_MEMREGION_SU_RWX))
 				continue;
 
+#if __riscv_xlen == 64
 			if (level == 3)
-				add_mttl3_region(dom->mtt, reg->base, reg->order, reg->flags);
-			else
-				add_mttl2_region(dom->mtt, reg->base, reg->order, reg->flags);
+				add_mttl3_region(dom->mtt, reg->base, reg->size, reg->flags);
+#endif
+
+			if (level == 2)
+				add_mttl2_region(dom->mtt, reg->base, reg->size, reg->flags);
 		}
 	}
 
@@ -386,15 +449,17 @@ int sbi_hart_smmtt_configure(struct sbi_scratch *scratch)
 	int rc;
 	struct sbi_domain *dom = sbi_domain_thishart_ptr();
 	unsigned int pmp_count = sbi_hart_pmp_count(scratch);
+
 	/* initialize MTT table */
 	rc = initialize_mtt(dom, scratch);
 	if (rc)
 		return rc;
 
-	mttp_set(SMMTT_BARE, 3, ((uintptr_t)dom->mtt) >> PAGE_SHIFT);
 	/* use PMP to protect MTT table */
 	pmp_set(pmp_count - 1, PMP_R | PMP_W | PMP_X, 0, __riscv_xlen);
-	pmp_set(0, 0, smmtt_base, smmtt_order);
+	pmp_set(0, 0, smmtt_table_base, log2roundup(smmtt_table_size));
+
+	mttp_set(SMMTT_BARE, dom->index, ((uintptr_t)dom->mtt) >> PAGE_SHIFT);
 
 	return SBI_OK;
 }
@@ -403,7 +468,7 @@ static int setup_mtt_table()
 {
 	int len;
 	void* fdt;
-	uint64_t chosen_offset;
+	uint64_t chosen_offset, smmtt_order;
 	const int* order_prop;
 	const int* base_prop;
 
@@ -416,28 +481,137 @@ static int setup_mtt_table()
 	base_prop = fdt_getprop(fdt, chosen_offset, "base", &len);
 
 	smmtt_order = fdt32_to_cpu(order_prop[0]);
-	smmtt_size = 1ULL << smmtt_order;
-	smmtt_base = ((uint64_t)fdt32_to_cpu(base_prop[0]) << 32) | fdt32_to_cpu(base_prop[1]);
+	smmtt_table_size = 1ULL << smmtt_order;
+	smmtt_table_base = ((uint64_t)fdt32_to_cpu(base_prop[0]) << 32) | fdt32_to_cpu(base_prop[1]);
 
-	if (smmtt_size == 0 || smmtt_base == 0)
-		return SBI_ERR_FAILED;
+	// Ensure NAPOT so we can later fit this in a single PMP register
+	if ((smmtt_table_size & (smmtt_table_size - 1)) != 0) {
+		return SBI_EINVAL;
+	}
+
+	if ((smmtt_table_base & (smmtt_table_size - 1)) != 0) {
+		return SBI_EINVAL;
+	}
 
 	// Initialize the SMMTT table heap
 	sbi_heap_alloc_new(&smmtt_hpctrl);
-	sbi_heap_init_new(smmtt_hpctrl, smmtt_base, smmtt_size);
+	sbi_heap_init_new(smmtt_hpctrl, smmtt_table_base, smmtt_table_size);
 
 	return SBI_OK;
 }
 
+
+#define SECURE_DEVICE(status, sstatus) \
+	(!strcmp(status, "disabled") && !strcmp(sstatus, "okay"))
+
+#define NONSECURE_DEVICE(status, sstatus) \
+	(!strcmp(status, "okay") && !strcmp(sstatus, "disabled"))
+
+#define DISABLED_DEVICE(status, sstatus) \
+	(!strcmp(status, "disabled") && !strcmp(sstatus, "disabled"))
+
+#define AVAILABLE_DEVICE(status, sstatus) \
+	(!strcmp(status, "okay") && !strcmp(sstatus, "okay"))
+
+static int device_get_flags(const void *fdt, int dev, unsigned long *flags)
+{
+	const char *status, *sstatus, *name;
+
+	status = fdt_getprop(fdt, dev, "status", NULL);
+	if (!status)
+		status = "okay";
+
+	sstatus = fdt_getprop(fdt, dev, "secure-status", NULL);
+	if (!sstatus)
+		sstatus = status;
+
+	*flags = SBI_DOMAIN_MEMREGION_MMIO;
+
+	if (SECURE_DEVICE(status, sstatus) ||
+	    DISABLED_DEVICE(status, sstatus)) {
+		*flags |= (SBI_DOMAIN_MEMREGION_M_READABLE |
+			  SBI_DOMAIN_MEMREGION_M_WRITABLE);
+	} else if (NONSECURE_DEVICE(status, sstatus)) {
+		*flags |= (SBI_DOMAIN_MEMREGION_SU_READABLE |
+			  SBI_DOMAIN_MEMREGION_SU_WRITABLE);
+	} else if (AVAILABLE_DEVICE(status, sstatus)) {
+		*flags |= (SBI_DOMAIN_MEMREGION_M_READABLE |
+			  SBI_DOMAIN_MEMREGION_M_WRITABLE |
+			  SBI_DOMAIN_MEMREGION_SU_READABLE |
+			  SBI_DOMAIN_MEMREGION_SU_WRITABLE);
+	} else {
+		name = fdt_get_name(fdt, dev, NULL);
+		if (name) {
+			sbi_printf("%s: invalid security specification "
+				   "for device %s\n", __func__ , name);
+		} else {
+			sbi_printf("%s: invalid security specification\n",
+				   __func__);
+		}
+
+		return SBI_EINVAL;
+	}
+
+	return SBI_OK;
+}
+
+static int create_regions_for_devices()
+{
+	int soc, dev, ret, i;
+	uint64_t base, size;
+	unsigned long flags;
+
+	struct sbi_domain_memregion reg;
+
+	const void *fdt = fdt_get_address();
+	soc = fdt_path_offset(fdt, "/soc");
+	if (soc < 0) {
+		return SBI_EINVAL;
+	}
+
+	fdt_for_each_subnode(dev, fdt, soc) {
+		// Find all devices with MMIO ranges
+		if (fdt_get_property(fdt, dev, "reg", NULL)) {
+			// Find permissions
+			ret = device_get_flags(fdt, dev, &flags);
+			if (ret < 0) {
+				return ret;
+			}
+
+			i = 0;
+			while(1) {
+				ret = fdt_get_node_addr_size(fdt, dev, i++,
+							     &base, &size);
+				if (ret < 0) {
+					break;
+				}
+
+				sbi_domain_memregion_init(base, size, flags, &reg);
+				ret = sbi_domain_add_memregion(&root, &reg);
+				if(ret < 0) {
+					return ret;
+				}
+			}
+		}
+	}
+
+	return 0;
+}
+
+
 int sbi_smmtt_init(struct sbi_scratch *scratch, bool cold_boot)
 {
 	int rc;
-	if (!sbi_hart_has_extension(scratch, SBI_HART_EXT_SMMTT))	
+	if (!sbi_hart_has_extension(scratch, SBI_HART_EXT_SMMTT)) 
 		return SBI_OK;
 	
 	if (cold_boot)
 	{
 		rc = setup_mtt_table();
+		if (rc < 0)
+			return rc;
+	
+		rc = create_regions_for_devices();
 		if (rc < 0)
 			return rc;
 	}

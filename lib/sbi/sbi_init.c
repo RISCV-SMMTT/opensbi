@@ -31,7 +31,6 @@
 #include <sbi/sbi_tlb.h>
 #include <sbi/sbi_version.h>
 #include <sbi/sbi_unit_test.h>
-#include <sbi/sbi_smmtt.h>
 
 #define BANNER                                              \
 	"   ____                    _____ ____ _____\n"     \
@@ -451,6 +450,10 @@ static void __noreturn init_warm_startup(struct sbi_scratch *scratch,
 	if (rc)
 		sbi_hart_hang();
 
+	rc = sbi_smmtt_init(scratch, false);
+	if (rc) 
+		sbi_hart_hang();
+
 	rc = sbi_platform_final_init(plat, false);
 	if (rc)
 		sbi_hart_hang();
@@ -480,7 +483,7 @@ static void __noreturn init_warm_resume(struct sbi_scratch *scratch,
 	if (rc)
 		sbi_hart_hang();
 
-	rc = sbi_hart_pmp_configure(scratch);
+	rc = sbi_hart_isolation_configure(scratch);
 	if (rc)
 		sbi_hart_hang();
 

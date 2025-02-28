@@ -15,7 +15,7 @@ typedef enum
 #if __riscv_xlen == 32
     TYPE_4M_PAGE        = 0b101,
 #else
-    TYPE_2M_PAGE        = 0b110,
+    TYPE_2M_PAGE         = 0b110,
 #endif
 } smmtt_type;
 
@@ -34,11 +34,28 @@ typedef enum {
     PERMS_MTTL1_ALLOW_RWX    = 0b11,
 } perms_mttl1;
 
-#define PA_PN0      _ULL(0x0000000000f000)
-#define PA_PN1      _ULL(0x00000001ff0000)
-#define PA_PN2      _ULL(0x003ffffe000000)
-#define PA_PN3      _ULL(0xffc00000000000)
-#define PA_XM_OFFS  _ULL(0x00000001e00000)
+#define PA32_PN0      _ULL(0x000007000)
+#define PA32_PN1      _ULL(0x001ff8000)
+#define PA32_PN2      _ULL(0x3fe000000)
+#define PA32_4M_OFFS  _ULL(0x001c00000)
+#define PA64_PN0      _ULL(0x0000000000f000)
+#define PA64_PN1      _ULL(0x00000001ff0000)
+#define PA64_PN2      _ULL(0x003ffffe000000)
+#define PA64_PN3      _ULL(0xffc00000000000)
+#define PA64_2M_OFFS  _ULL(0x00000001e00000)
+
+#if __riscv_xlen == 32
+#define PA_PN0      PA32_PN0
+#define PA_PN1      PA32_PN1
+#define PA_PN2      PA32_PN2
+#define PA_XM_OFFS  PA32_4M_OFFS
+#else
+#define PA_PN0      PA64_PN0
+#define PA_PN1      PA64_PN1
+#define PA_PN2      PA64_PN2
+#define PA_PN3      PA64_PN3
+#define PA_XM_OFFS  PA64_2M_OFFS
+#endif
 
 #define MTT_PERMS_MASK  _ULL(0b11)
 #define MTT_PERMS_BITS  (2)
@@ -65,14 +82,25 @@ typedef struct
     uint64_t zero: 20;
 } mttl3_entry_t;
 
+#if __riscv_xlen == 32
+typedef struct
+{
+    uint32_t info: 22;
+    uint32_t type: 3;
+    uint32_t zero: 7;
+} mttl2_entry_t;
+#else
 typedef struct
 {
     uint64_t info: 44;
     uint64_t type: 3;
     uint64_t zero: 17;
 } mttl2_entry_t;
+#endif
 
 typedef uint64_t mttl1_entry_t;
+
+unsigned int mttp_get_sdidlen();
 
 void mttp_set(mttp_mode_t mode, unsigned int sdid, physical_addr_t ppn);
 
