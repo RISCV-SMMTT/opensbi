@@ -21,19 +21,6 @@
 #include <libfdt.h>
 #include <sbi/sbi_math.h>
 
-#if __riscv_xlen == 32
-
-#define SMMTT_DEFAULT_MODE (SMMTT_34)
-#define MTTL2_SIZE (0x2 * 0x400)
-
-#else
-
-#define SMMTT_DEFAULT_MODE (SMMTT_46)
-#define MTTL3_SIZE (0x8 * 0x400)
-#define MTTL2_SIZE (0x10 * 0x400 * 0x400)
-
-#endif
-
 struct sbi_heap_control *smmtt_hpctrl = NULL;
 uint64_t smmtt_table_base, smmtt_table_size;
 
@@ -119,7 +106,8 @@ static int get_mtt_level(mttp_mode_t mode, int *level)
 	return SBI_OK;
 }
 
-static inline uint64_t mttl2_1g_type_from_flags(unsigned long flags) {
+smmtt_type mttl2_1g_type_from_flags(unsigned long flags)
+{
 	if (flags & SBI_DOMAIN_MEMREGION_SU_READABLE) 
 	{
 		if (flags & SBI_DOMAIN_MEMREGION_SU_WRITABLE) 
@@ -141,17 +129,14 @@ static inline uint64_t mttl2_1g_type_from_flags(unsigned long flags) {
 		return TYPE_1G_DISALLOW;
 }
 
-static int add_1g_region(mttl2_entry_t *entry, unsigned long flags, bool mtt_finalized)
+static int add_1g_region(mttl2_entry_t *entry, unsigned long flags)
 {
 	int i;
 	for (i = 0; i < 32; i++)
 	{
 		smmtt_type type = mttl2_1g_type_from_flags(flags);
 
-		if (!mtt_finalized)
-		{
-			MTTL2_FIELD_ENSURE_EQUAL(entry, type, type);
-		}
+		MTTL2_FIELD_ENSURE_EQUAL(entry, type, type);
 
 		entry->info = 0;
 		entry->zero = 0;
@@ -160,7 +145,7 @@ static int add_1g_region(mttl2_entry_t *entry, unsigned long flags, bool mtt_fin
 	return SBI_OK;
 }
 
-static inline smmtt_xm_perms xm_perms_from_flags(unsigned long flags)
+smmtt_xm_perms xm_perms_from_flags(unsigned long flags)
 {
 	if (flags & SBI_DOMAIN_MEMREGION_SU_READABLE)
 	{
@@ -183,7 +168,7 @@ static inline smmtt_xm_perms xm_perms_from_flags(unsigned long flags)
 		return PERMS_XM_DISALLOW;
 }
 
-static int add_xm_region(mttl2_entry_t *entry, unsigned long base, unsigned long flags, bool mtt_finalized)
+static int add_xm_region(mttl2_entry_t *entry, unsigned long base, unsigned long flags)
 {
 	unsigned long offset, info, perms, field;
 
@@ -194,10 +179,7 @@ static int add_xm_region(mttl2_entry_t *entry, unsigned long base, unsigned long
 #endif
 
 	// Ensure we're not trying to change the type of this mttl2 entry
-	if (!mtt_finalized)
-	{
-		MTTL2_FIELD_ENSURE_EQUAL(entry, type, type);
-	}
+	MTTL2_FIELD_ENSURE_EQUAL(entry, type, type);
 
 	offset = EXTRACT_FIELD(base, PA_XM_OFFS);
 	field = MTT_PERM_FIELD(offset);
@@ -212,7 +194,7 @@ static int add_xm_region(mttl2_entry_t *entry, unsigned long base, unsigned long
 	return SBI_OK;
 }
 
-static inline mttl1_entry_t *mttl1_from_mttl2(mttl2_entry_t *entry)
+mttl1_entry_t *mttl1_from_mttl2(mttl2_entry_t *entry)
 {
 	unsigned long mttl1_ppn;
 	mttl1_entry_t *mttl1 = NULL;
@@ -243,7 +225,7 @@ static inline mttl1_entry_t *mttl1_from_mttl2(mttl2_entry_t *entry)
 	return mttl1;
 }
 
-static inline perms_mttl1 mttl1_perms_from_flags(unsigned long flags)
+perms_mttl1 mttl1_perms_from_flags(unsigned long flags)
 {
 	if (flags & SBI_DOMAIN_MEMREGION_SU_READABLE) 
 	{
@@ -265,16 +247,13 @@ static inline perms_mttl1 mttl1_perms_from_flags(unsigned long flags)
 		return PERMS_MTTL1_DISALLOWED;
 }
 
-static int add_mttl1_region(mttl2_entry_t *entry, unsigned long base, unsigned long flags, bool mtt_finalized)
+static int add_mttl1_region(mttl2_entry_t *entry, unsigned long base, unsigned long flags)
 {
 	unsigned long index, offset, field;
 	perms_mttl1 perms;
 	mttl1_entry_t *mttl1;
 
-	if (!mtt_finalized)
-	{
-		MTTL2_FIELD_ENSURE_EQUAL(entry, type, TYPE_MTTL1_DIR);
-	}
+	MTTL2_FIELD_ENSURE_EQUAL(entry, type, TYPE_MTTL1_DIR);
 
 	// Allocate or get an existing mttl1 table
 	mttl1 = mttl1_from_mttl2(entry);
@@ -300,7 +279,7 @@ static int add_mttl1_region(mttl2_entry_t *entry, unsigned long base, unsigned l
 	return SBI_OK;
 }
 
-static int add_mttl2_region(mttl2_entry_t *mttl2, unsigned long base,
+int add_mttl2_region(mttl2_entry_t *mttl2, unsigned long base,
 				  unsigned long size, unsigned long flags)
 {
 	int rc;
@@ -315,7 +294,7 @@ static int add_mttl2_region(mttl2_entry_t *mttl2, unsigned long base,
 
 		if (FITS(base, size, GiB))
 		{
-			rc = add_1g_region(&mttl2[index], flags, false);
+			rc = add_1g_region(&mttl2[index], flags);
 			if (rc)
 				return rc;
 			size -= GiB;
@@ -323,7 +302,7 @@ static int add_mttl2_region(mttl2_entry_t *mttl2, unsigned long base,
 		}
 		else if (FITS(base, size, XM_SIZE))
 		{
-			rc = add_xm_region(entry, base, flags, false);
+			rc = add_xm_region(entry, base, flags);
 			if (rc)
 				return rc;
 			size -= XM_SIZE;
@@ -331,7 +310,7 @@ static int add_mttl2_region(mttl2_entry_t *mttl2, unsigned long base,
 		}
 		else
 		{
-			rc = add_mttl1_region(entry, base, flags, false);
+			rc = add_mttl1_region(entry, base, flags);
 			if (rc)
 				return rc;
 			size -= PAGE_SIZE;
@@ -392,9 +371,15 @@ static int initialize_mtt(struct sbi_domain *dom, struct sbi_scratch *scratch)
 			return rc;
 
 		if (level == 3)
+		{
 			dom->mtt = sbi_aligned_alloc_from(smmtt_hpctrl, MTTL3_SIZE, MTTL3_SIZE);
+			memset(dom->mtt, 0, MTTL3_SIZE);
+		}
 		else
+		{
 			dom->mtt = sbi_aligned_alloc_from(smmtt_hpctrl, MTTL2_SIZE, MTTL2_SIZE);
+			memset(dom->mtt, 0, MTTL2_SIZE);
+		}
 	
 		if (!dom->mtt)
 			return rc = SBI_ENOMEM;

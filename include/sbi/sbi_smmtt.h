@@ -37,24 +37,44 @@ typedef enum {
 #define PA32_PN0      _ULL(0x000007000)
 #define PA32_PN1      _ULL(0x001ff8000)
 #define PA32_PN2      _ULL(0x3fe000000)
+#define PA32_1G       _ULL(0xfc0000000)
 #define PA32_4M_OFFS  _ULL(0x001c00000)
 #define PA64_PN0      _ULL(0x0000000000f000)
 #define PA64_PN1      _ULL(0x00000001ff0000)
 #define PA64_PN2      _ULL(0x003ffffe000000)
 #define PA64_PN3      _ULL(0xffc00000000000)
 #define PA64_2M_OFFS  _ULL(0x00000001e00000)
+#define PA64_1G       _ULL(0xffffffc0000000)
+#define RV32_MTTL1_FIELD 8
+#define RV32_MTTL2_FIELD 8
+#define RV32_MTTL1_ENTRIES 1024
+#define RV32_MTTL2_ENTRIES 512
+#define RV64_MTTL1_FIELD 16
+#define RV64_MTTL2_FIELD 16
+#define RV64_MTTL1_ENTRIES 512
+#define RV64_MTTL2_ENTRIES _UL(0x100000)
 
 #if __riscv_xlen == 32
 #define PA_PN0      PA32_PN0
 #define PA_PN1      PA32_PN1
 #define PA_PN2      PA32_PN2
 #define PA_XM_OFFS  PA32_4M_OFFS
+#define PA_1G       PA32_1G
+#define MTTL1_FIELD RV32_MTTL1_FIELD
+#define MTTL2_FIELD RV32_MTTL2_FIELD
+#define MTTL1_ENTRIES RV32_MTTL1_ENTRIES
+#define MTTL2_ENTRIES RV32_MTTL2_ENTRIES
 #else
 #define PA_PN0      PA64_PN0
 #define PA_PN1      PA64_PN1
 #define PA_PN2      PA64_PN2
 #define PA_PN3      PA64_PN3
 #define PA_XM_OFFS  PA64_2M_OFFS
+#define PA_1G       PA64_1G
+#define MTTL1_FIELD RV64_MTTL1_FIELD
+#define MTTL2_FIELD RV64_MTTL2_FIELD
+#define MTTL1_ENTRIES RV64_MTTL1_ENTRIES
+#define MTTL2_ENTRIES RV64_MTTL2_ENTRIES
 #endif
 
 #define MTT_PERMS_MASK  _ULL(0b11)
@@ -100,8 +120,24 @@ typedef struct
 
 typedef uint64_t mttl1_entry_t;
 
+extern struct sbi_heap_control *smmtt_hpctrl;
+
+#if __riscv_xlen == 32
+
+#define SMMTT_DEFAULT_MODE (SMMTT_34)
+#define MTTL2_SIZE (0x2 * 0x400)
+
+#else
+
+#define SMMTT_DEFAULT_MODE (SMMTT_46)
+#define MTTL3_SIZE (0x8 * 0x400)
+#define MTTL2_SIZE (0x10 * 0x400 * 0x400)
+
+#endif
+
 /* Definitions */
 
+#define KiB (1 << 10)
 #define MiB (1UL << 20)
 #define GiB (1ULL << 30)
 
@@ -136,4 +172,12 @@ void mttp_get(mttp_mode_t* mode, unsigned int* sdid, physical_addr_t* ppn);
 int sbi_smmtt_init(struct sbi_scratch *scratch, bool cold_boot);
 
 int sbi_hart_smmtt_configure(struct sbi_scratch *scratch);
+
+mttl1_entry_t *mttl1_from_mttl2(mttl2_entry_t *entry);
+
+smmtt_xm_perms xm_perms_from_flags(unsigned long flags);
+
+smmtt_type mttl2_1g_type_from_flags(unsigned long flags);
+
+perms_mttl1 mttl1_perms_from_flags(unsigned long flags);
 #endif   // __SBI_SMMTT_H__
