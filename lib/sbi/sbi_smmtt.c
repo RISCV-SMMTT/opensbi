@@ -601,7 +601,7 @@ static int create_regions_for_devices()
 
 int sbi_smmtt_init(struct sbi_scratch *scratch, bool cold_boot)
 {
-	int rc;
+	int rc = 0;
 	if (!sbi_hart_has_extension(scratch, SBI_HART_EXT_SMMTT)) 
 		return SBI_OK;
 	
