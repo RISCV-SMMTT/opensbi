@@ -26,7 +26,7 @@ unsigned long mttl3_get_mttl2(unsigned long ppn, uint64_t base)
 }
 #endif
 
-int move_1G_XM(mttl2_entry_t *mttl2, unsigned long base, smmtt_type type)
+static int modify_1G_XM(mttl2_entry_t *mttl2, unsigned long base, smmtt_type type)
 {
     unsigned long info, index;
     mttl2_entry_t *entry;
@@ -53,7 +53,7 @@ int move_1G_XM(mttl2_entry_t *mttl2, unsigned long base, smmtt_type type)
     return SBI_OK;
 }
 
-int move_XM_4K(mttl2_entry_t *entry, unsigned long base, smmtt_type type, unsigned long flags)
+static int modify_XM_4K(mttl2_entry_t *entry, unsigned long base, smmtt_type type, unsigned long flags)
 {
     mttl1_entry_t *mttl1 = NULL;
     unsigned long index, field, offset;
@@ -95,7 +95,7 @@ int move_XM_4K(mttl2_entry_t *entry, unsigned long base, smmtt_type type, unsign
     return SBI_OK;
 }
 
-int reclaim_1G_page(mttl2_entry_t *mttl2, mttl2_entry_t *entry, unsigned long base, unsigned long size, unsigned long flags)
+static int modify_1G_page(mttl2_entry_t *mttl2, mttl2_entry_t *entry, unsigned long base, unsigned long size, unsigned long flags)
 {
     int rc;
     smmtt_type type = entry->type;
@@ -116,8 +116,7 @@ int reclaim_1G_page(mttl2_entry_t *mttl2, mttl2_entry_t *entry, unsigned long ba
              * we also need to modify all other entry from 1G type to XM type
              * use base & PA_1G to get the first entry of this 32 entries
              */
-
-            move_1G_XM(mttl2, base, type);
+            modify_1G_XM(mttl2, base, type);
 
             offset = EXTRACT_FIELD(base, PA_XM_OFFS);
             field = MTT_PERM_FIELD(offset);
@@ -135,9 +134,9 @@ int reclaim_1G_page(mttl2_entry_t *mttl2, mttl2_entry_t *entry, unsigned long ba
              * modify this entry from XM type to TYPE_MTTL1_DIR
              * modify this entry in MTTL1 
              */
-            move_1G_XM(mttl2, base, type);
+            modify_1G_XM(mttl2, base, type);
 
-            rc = move_XM_4K(entry, base, type, flags);
+            rc = modify_XM_4K(entry, base, type, flags);
             break;
         default:
             return SBI_EINVAL;
@@ -145,7 +144,7 @@ int reclaim_1G_page(mttl2_entry_t *mttl2, mttl2_entry_t *entry, unsigned long ba
     return rc;
 }
 
-int reclaim_XM_page(mttl2_entry_t *entry, unsigned long base, unsigned long size, unsigned long flags)
+static int modify_XM_page(mttl2_entry_t *entry, unsigned long base, unsigned long size, unsigned long flags)
 {
     int rc;
     smmtt_type type = entry->type;
@@ -165,7 +164,7 @@ int reclaim_XM_page(mttl2_entry_t *entry, unsigned long base, unsigned long size
 
             break;
         case PAGE_SIZE:
-            rc = move_XM_4K(entry, base, type, flags);
+            rc = modify_XM_4K(entry, base, type, flags);
             break;
         default:
             return SBI_EINVAL;
@@ -174,7 +173,7 @@ int reclaim_XM_page(mttl2_entry_t *entry, unsigned long base, unsigned long size
     return rc;
 }
 
-int reclaim_4K_page(mttl2_entry_t *entry, unsigned long base, unsigned long size, unsigned long flags)
+static int modify_4K_page(mttl2_entry_t *entry, unsigned long base, unsigned long size, unsigned long flags)
 {
     unsigned long field, offset, index, mttl1_ppn;
     mttl1_entry_t *mttl1;
@@ -217,7 +216,7 @@ int modify(unsigned long base, unsigned long size, unsigned long flags)
     mttl2_ppn = ppn;
     mttl2 = (mttl2_entry_t *)(mttl2_ppn << PAGE_SHIFT);
 
-    // no privilege for this domain at this PA, no need for reclaim 
+    // no privilege for this domain at this PA, no need for modify 
     if (!mttl2)
         return SBI_OK;
 
@@ -232,27 +231,27 @@ int modify(unsigned long base, unsigned long size, unsigned long flags)
     case TYPE_1G_ALLOW_RWX:
     case TYPE_1G_ALLOW_RW:
     case TYPE_1G_ALLOW_RX:
-        rc = reclaim_1G_page(mttl2, entry, base, size, flags);
+        rc = modify_1G_page(mttl2, entry, base, size, flags);
 #if __riscv_xlen == 32
     case TYPE_4M_PAGE:
 #else
     case TYPE_2M_PAGE:
 #endif
-        rc = reclaim_XM_page(entry, base, size, flags);
+        rc = modify_XM_page(entry, base, size, flags);
     case TYPE_MTTL1_DIR:
-        rc = reclaim_4K_page(entry, base, size, flags);
+        rc = modify_4K_page(entry, base, size, flags);
     }
 
     return rc;
 }
 
 /* @return 0 on success and -1 on failure*/
-int reclaim(unsigned long base, unsigned long size)
+int remove(unsigned long base, unsigned long size)
 {
     return modify(base, size, 0);
 }
 
-int find_unused_entries(mttl2_entry_t *mttl2, int *index)
+static int find_unused_entries(mttl2_entry_t *mttl2, int *index)
 {
     int count = 0;
     int start = *index;
@@ -278,7 +277,7 @@ int find_unused_entries(mttl2_entry_t *mttl2, int *index)
     return SBI_ENOMEM;
 }
 
-unsigned long add_1G_page(mttl2_entry_t *mttl2, unsigned int sdid, unsigned long flags)
+static unsigned long allocate_1G_page(mttl2_entry_t *mttl2, unsigned int sdid, unsigned long flags)
 {
     int rc, index;
     unsigned long base;
@@ -302,7 +301,7 @@ unsigned long add_1G_page(mttl2_entry_t *mttl2, unsigned int sdid, unsigned long
     return base;
 }
 
-void get_next_base(unsigned long *base, unsigned int sdid)
+static void get_next_base(unsigned long *base, unsigned int sdid)
 {
     *base = *base > start_4K_index[sdid] ? 
         *base : start_4K_index[sdid];
@@ -311,7 +310,7 @@ void get_next_base(unsigned long *base, unsigned int sdid)
     if (*base >= USER_MAX_ADDR) *base = USER_BASE_ADDR;
 }
 
-unsigned long add_XM_page(mttl2_entry_t *mttl2, unsigned int sdid, unsigned long flags)
+static unsigned long allocate_XM_page(mttl2_entry_t *mttl2, unsigned int sdid, unsigned long flags)
 {
     unsigned long index, offset, field, base, info;
     mttl2_entry_t *entry;
@@ -375,7 +374,7 @@ unsigned long add_XM_page(mttl2_entry_t *mttl2, unsigned int sdid, unsigned long
     return 0;
 }
 
-unsigned long add_4K_page(mttl2_entry_t *mttl2, unsigned int sdid, unsigned long flags)
+static unsigned long allocate_4K_page(mttl2_entry_t *mttl2, unsigned int sdid, unsigned long flags)
 {
     mttl1_entry_t *mttl1;
     unsigned long index, offset, field, base;
@@ -434,7 +433,7 @@ unsigned long add_4K_page(mttl2_entry_t *mttl2, unsigned int sdid, unsigned long
     return 0;
 }
 
-unsigned long add(unsigned long size, unsigned long flags)
+unsigned long allocate_user_memory(unsigned long size, unsigned long flags)
 {
     mttp_mode_t mode;
     unsigned int sdid;
@@ -459,13 +458,13 @@ unsigned long add(unsigned long size, unsigned long flags)
     switch (size)
     {
     case GiB:
-        addr = add_1G_page(mttl2, sdid, flags);
+        addr = allocate_1G_page(mttl2, sdid, flags);
         break;
     case XM_SIZE:
-        addr = add_XM_page(mttl2, sdid, flags);
+        addr = allocate_XM_page(mttl2, sdid, flags);
         break;
     case PAGE_SIZE:
-        addr = add_4K_page(mttl2, sdid, flags);
+        addr = allocate_4K_page(mttl2, sdid, flags);
         break;
     default:
         break;

@@ -279,7 +279,7 @@ static int add_mttl1_region(mttl2_entry_t *entry, unsigned long base, unsigned l
 	return SBI_OK;
 }
 
-int add_mttl2_region(mttl2_entry_t *mttl2, unsigned long base,
+static int add_mttl2_region(mttl2_entry_t *mttl2, unsigned long base,
 				  unsigned long size, unsigned long flags)
 {
 	int rc;
@@ -555,7 +555,6 @@ static int create_regions_for_devices()
 
 	return 0;
 }
-
 
 int sbi_smmtt_init(struct sbi_scratch *scratch, bool cold_boot)
 {

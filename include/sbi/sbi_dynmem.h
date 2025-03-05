@@ -28,21 +28,27 @@ unsigned long start_1G_index[SBI_DOMAIN_MAX_INDEX] = { [0 ... (SBI_DOMAIN_MAX_IN
 unsigned long start_XM_index[SBI_DOMAIN_MAX_INDEX] = { [0 ... (SBI_DOMAIN_MAX_INDEX - 1)] = USER_BASE_ADDR };
 unsigned long start_4K_index[SBI_DOMAIN_MAX_INDEX] = { [0 ... (SBI_DOMAIN_MAX_INDEX - 1)] = USER_BASE_ADDR };
 
-// void *add(unsigned long size, unsigned long flags);
-unsigned long add(unsigned long size, unsigned long flags);
-
-/* @return 0 on success and -1 on failure*/
+/**
+ * Modify privilege of memory.
+ * @param  base base address to modify;
+ * @param  size size need to modify, must be multiple of PAGE_SIZE
+ * @return 0 on success and SBI_EINVAL on failure
+ */
 int modify(unsigned long base, unsigned long size, unsigned long flags);
 
-
-
+/**
+ * remove memory.
+ * @param  base base address to reclaim;
+ * @param  size size need to reclaim, must be multiple of PAGE_SIZE
+ * @return 0 on success and SBI_EINVAL on failure
+ */
+int remove(unsigned long base, unsigned long size);
 
 /**
  * Allocate memory from user space.
  * @param  size size need to allocate, must be multiple of PAGE_SIZE
- * @return base address on success and -1 on failure
+ * @return base address on success and 0 on failure
  */
-
-unsigned long allocate_user_memory(unsigned long size);
+unsigned long allocate_user_memory(unsigned long size, unsigned long flags);
 
 #endif
