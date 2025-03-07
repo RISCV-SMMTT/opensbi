@@ -37,7 +37,7 @@ struct sbi_domain root = {
 	.system_reset_allowed = true,
 	.system_suspend_allowed = true,
 	.fw_region_inited = false,
-	.mttp_mode = SMMTT_BARE,
+	.mttp_mode = SMMTT_56,
 	.mtt = NULL,
 	.memregs_count = 0,
 };
@@ -175,6 +175,9 @@ void sbi_domain_dump(const struct sbi_domain *dom, const char *suffix)
 
 	sbi_printf("Domain%d Boot HART   %s: %d\n",
 		   dom->index, suffix, dom->boot_hartid);
+	
+	sbi_printf("Domain%d SMMTT MODE  %s: %d\n",
+		   dom->index, suffix, dom->mttp_mode);
 
 	sbi_printf("Domain%d Region Count%s: %d\n",
 		   dom->index, suffix, dom->memregs_count);

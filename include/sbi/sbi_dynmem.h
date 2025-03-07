@@ -32,6 +32,7 @@ unsigned long start_4K_index[SBI_DOMAIN_MAX_INDEX] = { [0 ... (SBI_DOMAIN_MAX_IN
  * Modify privilege of memory.
  * @param  base base address to modify;
  * @param  size size need to modify, must be multiple of PAGE_SIZE
+ * @param  flags new flags setted to the base address.
  * @return 0 on success and SBI_EINVAL on failure
  */
 int modify(unsigned long base, unsigned long size, unsigned long flags);
@@ -47,6 +48,7 @@ int remove(unsigned long base, unsigned long size);
 /**
  * Allocate memory from user space.
  * @param  size size need to allocate, must be multiple of PAGE_SIZE
+ * @param  flags flags of new memory.
  * @return base address on success and 0 on failure
  */
 unsigned long allocate_user_memory(unsigned long size, unsigned long flags);
