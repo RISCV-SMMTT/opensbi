@@ -83,7 +83,7 @@ typedef enum {
 #define MTT_PERM_FIELD(idx) \
     MTT_PERMS_MASK << (MTT_PERMS_BITS * (idx))
 
-typedef int mttp_mode_t;
+typedef int smmtt_mode_t;
 
 enum {
     SMMTT_BARE,
@@ -165,9 +165,9 @@ extern struct sbi_heap_control *smmtt_hpctrl;
 
 unsigned int mttp_get_sdidlen();
 
-void mttp_set(mttp_mode_t mode, unsigned int sdid, physical_addr_t ppn);
+void mttp_set(smmtt_mode_t mode, unsigned int sdid, physical_addr_t ppn);
 
-void mttp_get(mttp_mode_t* mode, unsigned int* sdid, physical_addr_t* ppn);
+void mttp_get(smmtt_mode_t* mode, unsigned int* sdid, physical_addr_t* ppn);
 
 int sbi_smmtt_init(struct sbi_scratch *scratch, bool cold_boot);
 

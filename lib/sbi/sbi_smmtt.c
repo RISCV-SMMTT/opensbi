@@ -28,7 +28,7 @@ uint64_t smmtt_table_base, smmtt_table_size;
 
 unsigned int mttp_get_sdidlen()
 {
-	mttp_mode_t mode;
+	smmtt_mode_t mode;
 	unsigned int sdid, sdidlen;
 	uintptr_t ppn;
 
@@ -49,7 +49,7 @@ unsigned int mttp_get_sdidlen()
 	}
 }
 
-void mttp_set(mttp_mode_t mode, unsigned int sdid, physical_addr_t ppn)
+void mttp_set(smmtt_mode_t mode, unsigned int sdid, physical_addr_t ppn)
 {
 	uintptr_t mttp = INSERT_FIELD(0, MTTP_PPN_MASK, ppn);
 	mttp	       = INSERT_FIELD(mttp, MTTP_SDID_MASK, sdid);
@@ -57,7 +57,7 @@ void mttp_set(mttp_mode_t mode, unsigned int sdid, physical_addr_t ppn)
 	csr_write(CSR_MTTP, mttp);
 }
 
-void mttp_get(mttp_mode_t *mode, unsigned int *sdid, physical_addr_t *ppn)
+void mttp_get(smmtt_mode_t *mode, unsigned int *sdid, physical_addr_t *ppn)
 {
 	uintptr_t mttp = csr_read(CSR_MTTP);
 	if (mode) {
@@ -73,7 +73,7 @@ void mttp_get(mttp_mode_t *mode, unsigned int *sdid, physical_addr_t *ppn)
 	}
 }
 
-static int get_mtt_level(mttp_mode_t mode, int *level)
+static int get_mtt_level(smmtt_mode_t mode, int *level)
 {
 	int tmp = -1;
 
@@ -357,16 +357,16 @@ static int initialize_mtt(struct sbi_domain *dom, struct sbi_scratch *scratch)
 
 	if (!dom->mtt)
 	{
-		if (dom->mttp_mode == SMMTT_BARE)
+		if (dom->smmtt_mode == SMMTT_BARE)
 		{
-			dom->mttp_mode = SMMTT_DEFAULT_MODE;
+			dom->smmtt_mode = SMMTT_DEFAULT_MODE;
 		}
 
-		if (!sbi_hart_has_smmtt_mode(scratch, dom->mttp_mode)) {
+		if (!sbi_hart_has_smmtt_mode(scratch, dom->smmtt_mode)) {
 			return SBI_EINVAL;
 		}
 
-		rc = get_mtt_level(dom->mttp_mode, &level);
+		rc = get_mtt_level(dom->smmtt_mode, &level);
 		if (rc)
 			return rc;
 
@@ -417,8 +417,8 @@ int sbi_hart_smmtt_configure(struct sbi_scratch *scratch)
 	pmp_set(pmp_count - 1, PMP_R | PMP_W | PMP_X, 0, __riscv_xlen);
 	pmp_set(0, 0, smmtt_table_base, log2roundup(smmtt_table_size));
 
-	mttp_set(SMMTT_BARE, dom->index, ((uintptr_t)dom->mtt) >> PAGE_SHIFT);
-
+	// mttp_set(SMMTT_BARE, dom->index, ((uintptr_t)dom->mtt) >> PAGE_SHIFT);
+	mttp_set(dom->smmtt_mode, dom->index, ((uintptr_t)dom->mtt) >> PAGE_SHIFT);
 	return SBI_OK;
 }
 

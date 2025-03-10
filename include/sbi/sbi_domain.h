@@ -62,7 +62,7 @@ struct sbi_domain {
 	/** Current isolation mode */
 	enum sbi_isolation_method isol_mode;
 	/** Current SMMTT mode */
-	mttp_mode_t mttp_mode;
+	smmtt_mode_t smmtt_mode;
 	/* MTT table of this domain */
 	void *mtt;
 	/* count the memregions this domain has */

@@ -285,7 +285,7 @@ unsigned int sbi_hart_mhpm_bits(struct sbi_scratch *scratch)
 }
 
 unsigned int sbi_hart_has_smmtt_mode(struct sbi_scratch *scratch,
-	mttp_mode_t mode)
+	smmtt_mode_t mode)
 {
 struct sbi_hart_features *hfeatures =
 sbi_scratch_offset_ptr(scratch, hart_features_offset);
@@ -818,7 +818,7 @@ static int hart_detect_features(struct sbi_scratch *scratch)
 		sbi_scratch_offset_ptr(scratch, hart_features_offset);
 	unsigned long val, oldval;
 	bool has_zicntr = false;
-	mttp_mode_t mode, check;
+	smmtt_mode_t mode, check;
 	int rc;
 
 	/* If hart features already detected then do nothing */

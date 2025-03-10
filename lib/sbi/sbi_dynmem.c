@@ -201,7 +201,7 @@ static int modify_4K_page(mttl2_entry_t *entry, unsigned long base, unsigned lon
 int modify(unsigned long base, unsigned long size, unsigned long flags)
 {
     int rc;
-    mttp_mode_t mode;
+    smmtt_mode_t mode;
     mttl2_entry_t *mttl2, *entry;
     unsigned long mttl2_ppn, ppn, index;
 
@@ -435,7 +435,7 @@ static unsigned long allocate_4K_page(mttl2_entry_t *mttl2, unsigned int sdid, u
 
 unsigned long allocate_user_memory(unsigned long size, unsigned long flags)
 {
-    mttp_mode_t mode;
+    smmtt_mode_t mode;
     unsigned int sdid;
     unsigned long ppn, index;
     mttl2_entry_t *mttl2;
