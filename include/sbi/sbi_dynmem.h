@@ -24,9 +24,10 @@
 #define USER_MAX_ADDR   0x7FFFFFFFFFULL
 #endif
 
-unsigned long start_1G_index[SBI_DOMAIN_MAX_INDEX] = { [0 ... (SBI_DOMAIN_MAX_INDEX - 1)] = USER_BASE_ADDR };
-unsigned long start_XM_index[SBI_DOMAIN_MAX_INDEX] = { [0 ... (SBI_DOMAIN_MAX_INDEX - 1)] = USER_BASE_ADDR };
-unsigned long start_4K_index[SBI_DOMAIN_MAX_INDEX] = { [0 ... (SBI_DOMAIN_MAX_INDEX - 1)] = USER_BASE_ADDR };
+unsigned long start_1G_index[SBI_DOMAIN_MAX_INDEX];
+unsigned long start_XM_index[SBI_DOMAIN_MAX_INDEX];
+unsigned long start_4K_index[SBI_DOMAIN_MAX_INDEX];
+unsigned long dram_max;
 
 /**
  * Modify privilege of memory.

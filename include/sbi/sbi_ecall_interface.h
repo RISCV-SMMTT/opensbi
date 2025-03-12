@@ -36,13 +36,18 @@
 #define SBI_EXT_SSE				0x535345
 #define SBI_EXT_FWFT				0x46574654
 #define SBI_EXT_SWTH				0x44444444			// domain switch
+#define SBI_EXT_DYNM				0x55555555			// dynamically modify memory of domain.
 
 /* SBI function IDs for SWTH extension*/
 #define SBI_EXT_SWTH_EXIT				0x0
 #define SBI_EXT_SWTH_ENTER				0x1
 #define SBI_EXT_SWTH_DUMP				0x2
-#define SBI_EXT_SWTH_ADDMEM				0x3
-#define SBI_EXT_SWTH_SUBMEM				0x4
+
+/* SBI function IDs for DYNM extension*/
+#define SBI_EXT_DYNM_ALOC				0x0
+#define SBI_EXT_DYNM_MODIFY				0x1
+#define SBI_EXT_DYNM_RECLAIM			0x2
+
 /* SBI function IDs for BASE extension*/
 #define SBI_EXT_BASE_GET_SPEC_VERSION		0x0
 #define SBI_EXT_BASE_GET_IMP_ID			0x1

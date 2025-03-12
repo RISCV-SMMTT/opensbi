@@ -364,17 +364,6 @@ static void __noreturn init_coldboot(struct sbi_scratch *scratch, u32 hartid)
 	sbi_boot_print_hart(scratch, hartid);
 
 	run_all_tests();
-
-	/*
-	 * Configure PMP at last because if SMEPMP is detected,
-	 * M-mode access to the S/U space will be rescinded.
-	 */
-	// rc = sbi_hart_pmp_configure(scratch);
-	// if (rc) {
-	// 	sbi_printf("%s: PMP configure failed (error %d)\n",
-	// 		   __func__, rc);
-	// 	sbi_hart_hang();
-	// }
 	/*
 	 * Configure hart isolation, if there is smmtt initialization,
 	 * configure smmtt, otherwise configure PMP

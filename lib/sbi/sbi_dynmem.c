@@ -10,7 +10,28 @@
 #include <sbi/sbi_dynmem.h>
 #include <sbi/sbi_smmtt.h>
 #include <sbi/sbi_heap.h>
+#include <sbi/sbi_hart.h>
+#include <sbi/sbi_hfence.h>
+#include <sbi_utils/fdt/fdt_helper.h>
+#include <libfdt.h>
 
+void get_dram(struct sbi_scratch *scratch)
+{
+    int rc, i;
+    uint64_t base, size;
+
+    rc = fdt_path_offset((const void *)scratch->next_arg1, "/memory");
+
+	fdt_get_node_addr_size((void *)scratch->next_arg1, rc, 0, &base, &size);
+
+    for(i = 0; i < SBI_DOMAIN_MAX_INDEX; i++)
+    {
+        start_4K_index[i] = base;
+        start_XM_index[i] = base;
+        start_1G_index[i] = base;
+    }
+    dram_max = base + size;
+}
 
 #if __riscv_xlen == 64
 unsigned long mttl3_get_mttl2(unsigned long ppn, uint64_t base)
@@ -35,7 +56,6 @@ static int modify_1G_XM(mttl2_entry_t *mttl2, unsigned long base, smmtt_type typ
     index = EXTRACT_FIELD(base, PA_PN2);
     entry = &mttl2[index];
 
-    info = 0;
     for (index = 0; index < MTTL2_FIELD; index++)
         info = INSERT_FIELD(info, MTT_PERM_FIELD(index), type);
 
@@ -74,21 +94,16 @@ static int modify_XM_4K(mttl2_entry_t *entry, unsigned long base, smmtt_type typ
     for (index = 0; index < MTTL1_FIELD; index++)
         field = INSERT_FIELD(field, MTT_PERM_FIELD(index), type);
 
-#if __riscv_xlen == 32
-    for (index = 0; index < 1024; index++)
-#else
-    for (index = 0; index < 512; index++)
-#endif
+    for (index = 0; index < MTTL1_ENTRIES; index++)
         mttl1[index] = field;
 
     // Determine index and offset in mttl1 that this address belongs to
     index = EXTRACT_FIELD(base, PA_PN1);
     offset = EXTRACT_FIELD(base, PA_PN0);
 
-	// Generate the bitfield for the permissions and ensure it is not set
 	field = MTT_PERM_FIELD(offset);
 
-	// Set the new permissions
+	// Set new permissions
     perms = mttl1_perms_from_flags(flags);
 	mttl1[index] = INSERT_FIELD(mttl1[index], field, perms);
 
@@ -97,51 +112,46 @@ static int modify_XM_4K(mttl2_entry_t *entry, unsigned long base, smmtt_type typ
 
 static int modify_1G_page(mttl2_entry_t *mttl2, mttl2_entry_t *entry, unsigned long base, unsigned long size, unsigned long flags)
 {
-    int rc;
     smmtt_type type = entry->type;
     unsigned long offset, field, info, index;
     smmtt_xm_perms perms;
 
     switch (size)
     {
-        case GiB:
-            type = mttl2_1g_type_from_flags(flags);
-            // only need to modify entry->type to MTTL2_1G_DISALLOW
-            for (index = 0; index < 32; index++)
-                (entry + index)->type = type;
-            rc = SBI_OK;
-            break;
-        case XM_SIZE: 
-            /* Besides this special entry,
-             * we also need to modify all other entry from 1G type to XM type
-             * use base & PA_1G to get the first entry of this 32 entries
-             */
-            modify_1G_XM(mttl2, base, type);
+    case GiB:
+        // only need to modify entry->type to new flags.
+        type = mttl2_1g_type_from_flags(flags);
+        for (index = 0; index < 32; index++)
+            (entry + index)->type = type;
 
-            offset = EXTRACT_FIELD(base, PA_XM_OFFS);
-            field = MTT_PERM_FIELD(offset);
-            info = entry->info;
-        
-            perms = xm_perms_from_flags(flags);
-            info = INSERT_FIELD(info, field, perms);
-            entry->info = info;
+        return SBI_OK;
+    case XM_SIZE: 
+        /* Besides this special entry,
+            * we also need to modify all other entry from 1G type to XM type
+            */
+        modify_1G_XM(mttl2, base, type);
 
-            rc = SBI_OK;
-            break;
-        case PAGE_SIZE:
-            /*
-             * modify all 32 entries to XM type
-             * modify this entry from XM type to TYPE_MTTL1_DIR
-             * modify this entry in MTTL1 
-             */
-            modify_1G_XM(mttl2, base, type);
+        offset = EXTRACT_FIELD(base, PA_XM_OFFS);
+        field = MTT_PERM_FIELD(offset);
+        info = entry->info;
+    
+        perms = xm_perms_from_flags(flags);
+        info = INSERT_FIELD(info, field, perms);
+        entry->info = info;
 
-            rc = modify_XM_4K(entry, base, type, flags);
-            break;
-        default:
-            return SBI_EINVAL;
+        return SBI_OK;
+    case PAGE_SIZE:
+        /*
+         * modify all 32 entries to XM type
+         * modify this entry from XM type to TYPE_MTTL1_DIR
+         * modify this entry in MTTL1 
+         */
+        modify_1G_XM(mttl2, base, type);
+
+        return modify_XM_4K(entry, base, type, flags);
+    default:
+        return SBI_EINVAL;
     }
-    return rc;
 }
 
 static int modify_XM_page(mttl2_entry_t *entry, unsigned long base, unsigned long size, unsigned long flags)
@@ -153,21 +163,20 @@ static int modify_XM_page(mttl2_entry_t *entry, unsigned long base, unsigned lon
 
     switch (size)
     {
-        case XM_SIZE: 
-            offset = EXTRACT_FIELD(base, PA_XM_OFFS);
-            field = MTT_PERM_FIELD(offset);
-            info = entry->info;
-        
-            perms = xm_perms_from_flags(flags);
-            info = INSERT_FIELD(info, field, perms);
-            entry->info = info;
+    case XM_SIZE: 
+        offset = EXTRACT_FIELD(base, PA_XM_OFFS);
+        field = MTT_PERM_FIELD(offset);
+        info = entry->info;
+    
+        perms = xm_perms_from_flags(flags);
+        info = INSERT_FIELD(info, field, perms);
+        entry->info = info;
 
-            break;
-        case PAGE_SIZE:
-            rc = modify_XM_4K(entry, base, type, flags);
-            break;
-        default:
-            return SBI_EINVAL;
+        return SBI_OK;
+    case PAGE_SIZE:
+        return modify_XM_4K(entry, base, type, flags);
+    default:
+        return SBI_EINVAL;
     }
     
     return rc;
@@ -190,17 +199,16 @@ static int modify_4K_page(mttl2_entry_t *entry, unsigned long base, unsigned lon
         perms = mttl1_perms_from_flags(flags);
         field = MTT_PERM_FIELD(offset);
         mttl1[index] = INSERT_FIELD(mttl1[index], field, perms);
+
+        return SBI_OK;
     }
     else
         return SBI_EINVAL;
-
-    return SBI_OK;
 }
 
 /* @return 0 on success and -1 on failure*/
 int modify(unsigned long base, unsigned long size, unsigned long flags)
 {
-    int rc;
     smmtt_mode_t mode;
     mttl2_entry_t *mttl2, *entry;
     unsigned long mttl2_ppn, ppn, index;
@@ -216,6 +224,9 @@ int modify(unsigned long base, unsigned long size, unsigned long flags)
     mttl2_ppn = ppn;
     mttl2 = (mttl2_entry_t *)(mttl2_ppn << PAGE_SHIFT);
 
+    if ((size & (size - 1)) != 0)
+        return SBI_EINVAL;
+
     // no privilege for this domain at this PA, no need for modify 
     if (!mttl2)
         return SBI_OK;
@@ -227,28 +238,48 @@ int modify(unsigned long base, unsigned long size, unsigned long flags)
     switch (entry->type)
     {
     case TYPE_1G_DISALLOW:
-        rc = SBI_OK;
+        return SBI_OK;
     case TYPE_1G_ALLOW_RWX:
     case TYPE_1G_ALLOW_RW:
     case TYPE_1G_ALLOW_RX:
-        rc = modify_1G_page(mttl2, entry, base, size, flags);
+        if (modify_1G_page(mttl2, entry, base, size, flags))
+            return SBI_EINVAL;
 #if __riscv_xlen == 32
     case TYPE_4M_PAGE:
 #else
     case TYPE_2M_PAGE:
 #endif
-        rc = modify_XM_page(entry, base, size, flags);
+        if (modify_XM_page(entry, base, size, flags))
+            return SBI_EINVAL;
+        break;
     case TYPE_MTTL1_DIR:
-        rc = modify_4K_page(entry, base, size, flags);
+        if (modify_4K_page(entry, base, size, flags))
+            return SBI_EINVAL;
+        break;
+    default:
+        return SBI_EINVAL;
     }
 
-    return rc;
+    return SBI_OK;
 }
 
 /* @return 0 on success and -1 on failure*/
 int remove(unsigned long base, unsigned long size)
 {
-    return modify(base, size, 0);
+    int rc = modify(base, size, 0);
+
+    if (misa_extension('S')) {
+        __asm__ __volatile__("sfence.vma");
+
+        /*
+         * If hypervisor mode is supported, flush caching
+         * structures in guest mode too.
+         */
+        if (misa_extension('H'))
+            __sbi_hfence_gvma_all();
+    }
+
+    return rc;
 }
 
 static int find_unused_entries(mttl2_entry_t *mttl2, int *index)
@@ -437,8 +468,11 @@ unsigned long allocate_user_memory(unsigned long size, unsigned long flags)
 {
     smmtt_mode_t mode;
     unsigned int sdid;
-    unsigned long ppn, index;
+    unsigned long ppn, index, addr;
     mttl2_entry_t *mttl2;
+
+    if ((size & (size - 1)) != 0)
+        return SBI_EINVAL;
 
     // get the base address to search for free space. 
     mttp_get(&mode, &sdid, &ppn);
@@ -453,7 +487,6 @@ unsigned long allocate_user_memory(unsigned long size, unsigned long flags)
     }
 #endif
     mttl2 = (mttl2_entry_t *)(ppn << PAGE_SHIFT);
-    unsigned long addr;
 
     switch (size)
     {
@@ -467,6 +500,7 @@ unsigned long allocate_user_memory(unsigned long size, unsigned long flags)
         addr = allocate_4K_page(mttl2, sdid, flags);
         break;
     default:
+        addr = 0;
         break;
     }
 

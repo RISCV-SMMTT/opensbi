@@ -25,7 +25,6 @@ struct sbi_heap_control *smmtt_hpctrl = NULL;
 uint64_t smmtt_table_base, smmtt_table_size;
 
 /* MTTP handling */
-
 unsigned int mttp_get_sdidlen()
 {
 	smmtt_mode_t mode;
@@ -358,13 +357,10 @@ static int initialize_mtt(struct sbi_domain *dom, struct sbi_scratch *scratch)
 	if (!dom->mtt)
 	{
 		if (dom->smmtt_mode == SMMTT_BARE)
-		{
 			dom->smmtt_mode = SMMTT_DEFAULT_MODE;
-		}
 
-		if (!sbi_hart_has_smmtt_mode(scratch, dom->smmtt_mode)) {
+		if (!sbi_hart_has_smmtt_mode(scratch, dom->smmtt_mode))
 			return SBI_EINVAL;
-		}
 
 		rc = get_mtt_level(dom->smmtt_mode, &level);
 		if (rc)
@@ -382,7 +378,7 @@ static int initialize_mtt(struct sbi_domain *dom, struct sbi_scratch *scratch)
 		}
 	
 		if (!dom->mtt)
-			return rc = SBI_ENOMEM;
+			return SBI_ENOMEM;
 
 		sbi_domain_for_each_memregion(dom, reg)
 		{
@@ -417,8 +413,8 @@ int sbi_hart_smmtt_configure(struct sbi_scratch *scratch)
 	pmp_set(pmp_count - 1, PMP_R | PMP_W | PMP_X, 0, __riscv_xlen);
 	pmp_set(0, 0, smmtt_table_base, log2roundup(smmtt_table_size));
 
-	// mttp_set(SMMTT_BARE, dom->index, ((uintptr_t)dom->mtt) >> PAGE_SHIFT);
-	mttp_set(dom->smmtt_mode, dom->index, ((uintptr_t)dom->mtt) >> PAGE_SHIFT);
+	mttp_set(SMMTT_BARE, dom->index, ((uintptr_t)dom->mtt) >> PAGE_SHIFT);
+	// mttp_set(dom->smmtt_mode, dom->index, ((uintptr_t)dom->mtt) >> PAGE_SHIFT);
 	return SBI_OK;
 }
 
@@ -528,9 +524,7 @@ static int create_regions_for_devices()
 	}
 
 	fdt_for_each_subnode(dev, fdt, soc) {
-		// Find all devices with MMIO ranges
 		if (fdt_get_property(fdt, dev, "reg", NULL)) {
-			// Find permissions
 			ret = device_get_flags(fdt, dev, &flags);
 			if (ret < 0) {
 				return ret;
