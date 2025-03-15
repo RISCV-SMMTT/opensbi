@@ -37,7 +37,6 @@ struct sbi_domain root = {
 	.system_reset_allowed = true,
 	.system_suspend_allowed = true,
 	.fw_region_inited = false,
-	.mttp_mode = SMMTT_BARE,
 	.mtt = NULL,
 	.memregs_count = 0,
 };
@@ -175,6 +174,9 @@ void sbi_domain_dump(const struct sbi_domain *dom, const char *suffix)
 
 	sbi_printf("Domain%d Boot HART   %s: %d\n",
 		   dom->index, suffix, dom->boot_hartid);
+	
+	sbi_printf("Domain%d SMMTT MODE  %s: %d\n",
+		   dom->index, suffix, dom->smmtt_mode);
 
 	sbi_printf("Domain%d Region Count%s: %d\n",
 		   dom->index, suffix, dom->memregs_count);
@@ -376,6 +378,24 @@ int sbi_domain_finalize(struct sbi_scratch *scratch, u32 cold_hartid)
 
 	/* Startup boot HART of domains */
 	sbi_domain_for_each(i, dom) {
+
+		// if (dom->index != 0)
+		// {
+
+		// 	sbi_domain_add_memrange(dom, 0x2000000, 0x10000, 0x10000, 
+		// 							SBI_DOMAIN_MEMREGION_MMIO |
+		// 							SBI_DOMAIN_MEMREGION_M_READABLE |
+		// 							SBI_DOMAIN_MEMREGION_M_WRITABLE);
+		// 	sbi_domain_add_memrange(dom, 0xC000000, 0x600000, 0x600000, 
+		// 							SBI_DOMAIN_MEMREGION_MMIO |
+		// 							SBI_DOMAIN_MEMREGION_M_READABLE |
+		// 							SBI_DOMAIN_MEMREGION_M_WRITABLE);
+		// 	sbi_domain_add_memrange(dom, 0x10000000, 0x2000, 0x2000, 
+		// 							SBI_DOMAIN_MEMREGION_MMIO |
+		// 							SBI_DOMAIN_MEMREGION_M_READABLE |
+		// 							SBI_DOMAIN_MEMREGION_M_WRITABLE);
+		// }
+
 		/* Domain boot HART index */
 		dhart = sbi_hartid_to_hartindex(dom->boot_hartid);
 

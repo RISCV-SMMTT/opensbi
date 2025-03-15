@@ -285,7 +285,7 @@ unsigned int sbi_hart_mhpm_bits(struct sbi_scratch *scratch)
 }
 
 unsigned int sbi_hart_has_smmtt_mode(struct sbi_scratch *scratch,
-	mttp_mode_t mode)
+	smmtt_mode_t mode)
 {
 struct sbi_hart_features *hfeatures =
 sbi_scratch_offset_ptr(scratch, hart_features_offset);
@@ -576,19 +576,20 @@ int sbi_hart_isolation_configure(struct sbi_scratch *scratch)
 	if (!pmp_count)
 		return 0;
 
-	if (sbi_hart_has_extension(scratch, SBI_HART_EXT_SMMTT)) {
+	if (sbi_hart_has_extension(scratch, SBI_HART_EXT_SMMTT)) 
 		rc = sbi_hart_smmtt_configure(scratch);
-	} else {
-	pmp_log2gran = sbi_hart_pmp_log2gran(scratch);
-	pmp_bits = sbi_hart_pmp_addrbits(scratch) - 1;
-	pmp_addr_max = (1UL << pmp_bits) | ((1UL << pmp_bits) - 1);
+	else 
+	{
+		pmp_log2gran = sbi_hart_pmp_log2gran(scratch);
+		pmp_bits = sbi_hart_pmp_addrbits(scratch) - 1;
+		pmp_addr_max = (1UL << pmp_bits) | ((1UL << pmp_bits) - 1);
 
-	if (sbi_hart_has_extension(scratch, SBI_HART_EXT_SMEPMP))
-		rc = sbi_hart_smepmp_configure(scratch, pmp_count,
-						pmp_log2gran, pmp_addr_max);
-	else
-		rc = sbi_hart_oldpmp_configure(scratch, pmp_count,
-						pmp_log2gran, pmp_addr_max);
+		if (sbi_hart_has_extension(scratch, SBI_HART_EXT_SMEPMP))
+			rc = sbi_hart_smepmp_configure(scratch, pmp_count,
+							pmp_log2gran, pmp_addr_max);
+		else
+			rc = sbi_hart_oldpmp_configure(scratch, pmp_count,
+							pmp_log2gran, pmp_addr_max);
 	}
 
 	/*
@@ -818,7 +819,7 @@ static int hart_detect_features(struct sbi_scratch *scratch)
 		sbi_scratch_offset_ptr(scratch, hart_features_offset);
 	unsigned long val, oldval;
 	bool has_zicntr = false;
-	mttp_mode_t mode, check;
+	smmtt_mode_t mode, check;
 	int rc;
 
 	/* If hart features already detected then do nothing */
