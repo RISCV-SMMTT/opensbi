@@ -409,11 +409,14 @@ int sbi_hart_smmtt_configure(struct sbi_scratch *scratch)
 	if (rc)
 		return rc;
 
+	// for (int i = 1; i < pmp_count - 1; i++) {
+	// 	pmp_disable(i);
+	// }
+
 	/* use PMP to protect MTT table */
 	pmp_set(pmp_count - 1, PMP_R | PMP_W | PMP_X, 0, __riscv_xlen);
 	pmp_set(0, 0, smmtt_table_base, log2roundup(smmtt_table_size));
 
-	// mttp_set(SMMTT_BARE, dom->index, ((uintptr_t)dom->mtt) >> PAGE_SHIFT);
 	mttp_set(dom->smmtt_mode, dom->index, ((uintptr_t)dom->mtt) >> PAGE_SHIFT);
 	return SBI_OK;
 }
@@ -562,9 +565,9 @@ int sbi_smmtt_init(struct sbi_scratch *scratch, bool cold_boot)
 		if (rc < 0)
 			return rc;
 	
-		rc = create_regions_for_devices();
-		if (rc < 0)
-			return rc;
+		// rc = create_regions_for_devices();
+		// if (rc < 0)
+		// 	return rc;
 	}
 
 	return rc;

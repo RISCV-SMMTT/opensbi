@@ -16,18 +16,18 @@
 #include <sbi/sbi_error.h>
 
 
-#if __riscv_xlen == 32
-#define USER_BASE_ADDR  0x89000000ULL
-#define USER_MAX_ADDR   0xBFFFFFFFULL
-#else 
-#define USER_BASE_ADDR  0x4000000000ULL
-#define USER_MAX_ADDR   0x7FFFFFFFFFULL
-#endif
+// #if __riscv_xlen == 32
+// #define USER_BASE_ADDR  0x89000000ULL
+// #define USER_MAX_ADDR   0xBFFFFFFFULL
+// #else 
+// #define USER_BASE_ADDR  0x4000000000ULL
+// #define USER_MAX_ADDR   0x7FFFFFFFFFULL
+// #endif
 
 unsigned long start_1G_index[SBI_DOMAIN_MAX_INDEX];
 unsigned long start_XM_index[SBI_DOMAIN_MAX_INDEX];
 unsigned long start_4K_index[SBI_DOMAIN_MAX_INDEX];
-unsigned long dram_max;
+unsigned long dram_base, dram_size, dram_max;
 
 /**
  * Modify privilege of memory.

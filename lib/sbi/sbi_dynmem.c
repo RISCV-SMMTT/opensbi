@@ -24,13 +24,16 @@ void get_dram(struct sbi_scratch *scratch)
 
 	fdt_get_node_addr_size((void *)scratch->next_arg1, rc, 0, &base, &size);
 
+    dram_base = base;
+    dram_size = size;
+    dram_max = base + size;
+
     for(i = 0; i < SBI_DOMAIN_MAX_INDEX; i++)
     {
         start_4K_index[i] = base;
         start_XM_index[i] = base;
         start_1G_index[i] = base;
     }
-    dram_max = base + size;
 }
 
 #if __riscv_xlen == 64
@@ -282,18 +285,18 @@ int remove(unsigned long base, unsigned long size)
     return rc;
 }
 
-static int find_unused_entries(mttl2_entry_t *mttl2, int *index)
+static int find_unused_entries(mttl2_entry_t *mttl2, unsigned long *index, unsigned long min, unsigned long max)
 {
     int count = 0;
     int start = *index;
     int pos;
 
     // must aligned with 1G
-    for (int i = 0; i < MTTL2_ENTRIES; i+=32)
+    for (int i = min; i < max; i += 32)
     {
-        if ((pos + i) >= MTTL2_ENTRIES) count = 0;
+        if ((pos + i) >= max) count = 0;
 
-        pos = (start + i) % MTTL2_ENTRIES;
+        pos = (start + i) % max;
         if (mttl2[pos].info == TYPE_1G_DISALLOW)
             count++;
         else
@@ -301,16 +304,16 @@ static int find_unused_entries(mttl2_entry_t *mttl2, int *index)
 
         if (count == 32)
         {
-            *index = (pos - 32 + 1 + MTTL2_ENTRIES) % MTTL2_ENTRIES;
+            *index = (pos - 32 + 1 + max) % max;
             return SBI_OK;
         }
     }
     return SBI_ENOMEM;
 }
 
-static unsigned long allocate_1G_page(mttl2_entry_t *mttl2, unsigned int sdid, unsigned long flags)
+static unsigned long allocate_1G_page(mttl2_entry_t *mttl2, unsigned int sdid, unsigned long flags, unsigned long min, unsigned long max)
 {
-    int rc, index;
+    unsigned long index;
     unsigned long base;
     smmtt_type type;
 
@@ -318,9 +321,8 @@ static unsigned long allocate_1G_page(mttl2_entry_t *mttl2, unsigned int sdid, u
 
     // find free space. 
     index = EXTRACT_FIELD(base, PA_PN2);
-    rc = find_unused_entries(mttl2, &index);
-    if (rc)
-        return 0;
+    if (find_unused_entries(mttl2, index, min, max))
+        return SBI_ENOMEM;
 
     type = mttl2_1g_type_from_flags(flags);
     for (int i = 0; i < 32; i++)
@@ -332,13 +334,13 @@ static unsigned long allocate_1G_page(mttl2_entry_t *mttl2, unsigned int sdid, u
     return base;
 }
 
-static void get_next_base(unsigned long *base, unsigned int sdid)
+static void get_next(unsigned long *base, unsigned int sdid, unsigned long max)
 {
     *base = *base > start_4K_index[sdid] ? 
         *base : start_4K_index[sdid];
     *base = *base > start_1G_index[sdid] ?
         *base + 32 * MiB : start_1G_index[sdid] + 1 * GiB;
-    if (*base >= USER_MAX_ADDR) *base = USER_BASE_ADDR;
+    if (*base >= dram_max) *base = dram_base;
 }
 
 static unsigned long allocate_XM_page(mttl2_entry_t *mttl2, unsigned int sdid, unsigned long flags)
@@ -464,12 +466,52 @@ static unsigned long allocate_4K_page(mttl2_entry_t *mttl2, unsigned int sdid, u
     return 0;
 }
 
-unsigned long allocate_user_memory(unsigned long size, unsigned long flags)
+unsigned long select_size(mttl2_entry_t *mttl2,unsigned int sdid, unsigned long size, unsigned long flags)
+{
+    unsigned long base;
+    switch (size)
+    {
+    case GiB:
+        base = allocate_1G_page(mttl2, sdid, flags);
+        break;
+    case XM_SIZE:
+        base = allocate_XM_page(mttl2, sdid, flags);
+        break;
+    case PAGE_SIZE:
+        base = allocate_4K_page(mttl2, sdid, flags);
+        break;
+    default:
+        base = 0;
+        break;
+    }
+    return base;
+}
+
+#if __riscv_xlen == 32
+unsigned long allocate(unsigned long size, unsigned long flags)
+{
+    unsigned int sdid;
+    unsigned long ppn, base;
+    mttl2_entry_t *mttl2;
+
+    if ((size & (size - 1)) != 0)
+        return SBI_EINVAL;
+
+    // get the base address to search for free space. 
+    mttp_get(NULL, &sdid, &ppn);
+
+    mttl2 = (mttl2_entry_t *)(ppn << PAGE_SHIFT);
+
+    return select_size(mttl2, sdid, size, flags);
+}
+#else
+unsigned long allocate(unsigned long size, unsigned long flags)
 {
     smmtt_mode_t mode;
     unsigned int sdid;
-    unsigned long ppn, index, addr;
+    unsigned long ppn, index, base, max;
     mttl2_entry_t *mttl2;
+    base = 0;
 
     if ((size & (size - 1)) != 0)
         return SBI_EINVAL;
@@ -477,32 +519,39 @@ unsigned long allocate_user_memory(unsigned long size, unsigned long flags)
     // get the base address to search for free space. 
     mttp_get(&mode, &sdid, &ppn);
 
-#if __riscv_xlen == 64
     if (mode == SMMTT_56)
     {
         mttl3_entry_t *mttl3 = (mttl3_entry_t *)(ppn << PAGE_SHIFT);
-        index = EXTRACT_FIELD(USER_BASE_ADDR, PA_PN3);
+        switch (size)
+        {
+        case GiB:
+            index = EXTRACT_FIELD(start_1G_index[sdid], PA_PN3);
+            break;
+        case XM_SIZE:
+            index = EXTRACT_FIELD(start_XM_index[sdid], PA_PN3);
+            break;
+        case PAGE_SIZE:
+            index = EXTRACT_FIELD(start_4K_index[sdid], PA_PN3);  
+            break;
+        default:
+            return SBI_EINVAL;
+            break;
+        }
+        while (base = 0)
+        {
+            ppn = mttl3[index].mttl2_ppn;
+            mttl2 = (mttl2_entry_t *)(ppn << PAGE_SHIFT);
 
-        ppn = mttl3[index].mttl2_ppn;
+            base = select_size(mttl2, sdid, size, flags);
+            if (index = EXTRACT_FIELD(dram_max, PA_PN3))
+                break;
+            index++;
+        }
     }
-#endif
-    mttl2 = (mttl2_entry_t *)(ppn << PAGE_SHIFT);
-
-    switch (size)
+    else 
     {
-    case GiB:
-        addr = allocate_1G_page(mttl2, sdid, flags);
-        break;
-    case XM_SIZE:
-        addr = allocate_XM_page(mttl2, sdid, flags);
-        break;
-    case PAGE_SIZE:
-        addr = allocate_4K_page(mttl2, sdid, flags);
-        break;
-    default:
-        addr = 0;
-        break;
+        mttl2 = (mttl2_entry_t *)(ppn << PAGE_SHIFT);
+        select_size(mttl2, sdid, size, flags);
     }
-
-    return addr;
 }
+#endif
