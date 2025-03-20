@@ -22,6 +22,5 @@ build.sh
 rv.dts
 qemu.dtb
 rv_dtb.dtb
-lib/sbi/sbi_domain_dynmem.c
-include/sbi/sbi_domain_dynmem.h
-include/sbi/sbi_domain_dynmem.h
+lib/sbi/sbi_dynmem.c
+include/sbi/sbi_dynmem.h
