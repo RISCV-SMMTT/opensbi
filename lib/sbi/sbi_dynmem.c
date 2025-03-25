@@ -49,7 +49,7 @@ unsigned long mttl3_get_mttl2(unsigned long ppn, uint64_t base)
 
 static int modify_1G_XM(mttl2_entry_t *mttl2, unsigned long base, smmtt_type type)
 {
-    unsigned long info, index;
+    unsigned long info = 0, index;
     mttl2_entry_t *entry;
 
     base = base & PA_1G;
@@ -286,7 +286,7 @@ static int find_unused_entries(mttl2_entry_t *mttl2, int *index)
 {
     int count = 0;
     int start = *index;
-    int pos;
+    int pos = 0;
 
     // must aligned with 1G
     for (int i = 0; i < MTTL2_ENTRIES; i+=32)
