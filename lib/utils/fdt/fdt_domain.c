@@ -11,6 +11,7 @@
 #include <libfdt.h>
 #include <libfdt_env.h>
 #include <sbi/sbi_domain.h>
+#include <sbi/sbi_smmtt.h>
 #include <sbi/sbi_error.h>
 #include <sbi/sbi_hartmask.h>
 #include <sbi/sbi_heap.h>

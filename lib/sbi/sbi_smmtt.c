@@ -15,11 +15,17 @@
 #include <sbi/sbi_error.h>
 #include <sbi/sbi_heap.h>
 #include <sbi/sbi_types.h>
-#include <sbi/sbi_domain.h>
 #include <sbi/sbi_console.h>
 #include <sbi_utils/fdt/fdt_helper.h>
 #include <libfdt.h>
 #include <sbi/sbi_math.h>
+#include <sbi/sbi_dynmem.h>
+
+#if __riscv_xlen == 32
+#define OFFSET_ENTRIES	8
+#else
+#define OFFSET_ENTRIES	16
+#endif
 
 void print_mttl1(mttl1_entry_t *mttl1, uintptr_t base_addr)
 {
@@ -38,7 +44,7 @@ void print_mttl1(mttl1_entry_t *mttl1, uintptr_t base_addr)
         sbi_printf("|  0x%013lx  |  0x%016lx  |  [", addr, info);
 
 
-        for (int j = 0; j < 32; j++) {
+        for (int j = 0; j < OFFSET_ENTRIES; j++) {
             unsigned long perms = (info >> (j * 2)) & 0x3; 
 
             if (perms == PERMS_MTTL1_ALLOW_RWX) sbi_printf("RWX ");
@@ -94,7 +100,21 @@ void print_mttl2(mttl2_entry_t *mttl2, uintptr_t base_addr)
                 default:                type_str = "UNKNOWN "; break;
             }
 
-            sbi_printf("|  0x%013lx  |  %s  |  0x%lx  |\n", addr, type_str, info);
+			if (entry->type == TYPE_2M_PAGE)
+			{
+				sbi_printf("|  0x%013lx  |  %s  |  ", addr, type_str);
+				for (int j = 0; j < OFFSET_ENTRIES; j++) {
+					unsigned long perms = (info >> (j * 2)) & 0x3; 
+		
+					if (perms == PERMS_MTTL1_ALLOW_RWX) sbi_printf("RWX ");
+					else if (perms == PERMS_MTTL1_ALLOW_RW) sbi_printf("RW- ");
+					else if (perms == PERMS_MTTL1_ALLOW_RX) sbi_printf("R-X ");
+					else sbi_printf("--- "); 
+				}
+				sbi_printf("\n");
+			}
+			else
+	            sbi_printf("|  0x%013lx  |  %s  |  0x%lx  |\n", addr, type_str, info);
 
             if (entry->type == TYPE_1G_ALLOW_RWX || entry->type == TYPE_1G_ALLOW_RW || entry->type == TYPE_1G_ALLOW_RX) {
                 i += 31; 
@@ -658,7 +678,6 @@ static int setup_mtt_table()
 	return SBI_OK;
 }
 
-
 #define SECURE_DEVICE(status, sstatus) \
 	(!strcmp(status, "disabled") && !strcmp(sstatus, "okay"))
 
@@ -762,6 +781,8 @@ int sbi_smmtt_init(struct sbi_scratch *scratch, bool cold_boot)
 	
 	if (cold_boot)
 	{
+		memory_region(scratch);
+
 		rc = setup_mtt_table();
 		if (rc < 0)
 			return rc;

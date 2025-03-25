@@ -4,6 +4,7 @@
 #include <sbi/sbi_const.h>
 #include <sbi/sbi_types.h>
 #include <sbi/sbi_scratch.h>
+#include <sbi/sbi_domain.h>
 
 typedef enum
 {
@@ -180,4 +181,6 @@ smmtt_xm_perms xm_perms_from_flags(unsigned long flags);
 smmtt_type mttl2_1g_type_from_flags(unsigned long flags);
 
 perms_mttl1 mttl1_perms_from_flags(unsigned long flags);
+
+void sbi_smmtt_print_table(struct sbi_domain *dom);
 #endif   // __SBI_SMMTT_H__

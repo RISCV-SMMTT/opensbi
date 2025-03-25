@@ -15,6 +15,11 @@
 #include <sbi_utils/fdt/fdt_helper.h>
 #include <libfdt.h>
 
+static unsigned long start_1G_addr[SBI_DOMAIN_MAX_INDEX];
+static unsigned long start_XM_addr[SBI_DOMAIN_MAX_INDEX];
+static unsigned long start_4K_addr[SBI_DOMAIN_MAX_INDEX];
+static unsigned long dram_base, dram_size, dram_max;
+
 void memory_region(struct sbi_scratch *scratch)
 {
     int rc, i;
@@ -286,31 +291,31 @@ int remove(unsigned long base, unsigned long size)
     return rc;
 }
 
-static unsigned long allocate_1G_page(mttl2_entry_t *mttl2, unsigned int sdid, unsigned long flags, unsigned long min, unsigned long max, unsigned long *count)
+static unsigned long allocate_1G_page(mttl2_entry_t *mttl2, unsigned int sdid, unsigned long flags, unsigned long min, unsigned long max)
 {
-    unsigned long index;
-    unsigned long addr;
+    unsigned long index, addr, count, record, i;
     smmtt_type type;
-    unsigned long i;
 
     addr = start_1G_addr[sdid];
 
     // find free space. 
-    index = EXTRACT_FIELD(addr, PA_PN2);
-    for (; index < max; index += 32)
+    record = EXTRACT_FIELD(addr, PA_PN2);
+    index = record;
+    do
     {
-        *count = (mttl2[index].type == TYPE_1G_DISALLOW) ? *count + 1 : 0;
-        
-        if (*count == 32)
+        count = (mttl2[index].type == TYPE_1G_DISALLOW) ? count + 1 : 0;
+
+        if (count == 32)
         {
             index = index - 31;
             break;
         }
-    }
 
-    if (*count != 32)    
+        index = (index < max) ? index + 1 : min;
+    } while (index == record);
+
+    if (count != 32)    
     {
-        start_1G_addr[sdid] = INSERT_FIELD(start_1G_addr[sdid], PA_PN2, max + 1);
         return 0;
     }
 
@@ -325,7 +330,7 @@ static unsigned long allocate_1G_page(mttl2_entry_t *mttl2, unsigned int sdid, u
 
 static unsigned long allocate_XM_page(mttl2_entry_t *mttl2, unsigned int sdid, unsigned long flags, unsigned long min, unsigned long max)
 {
-    unsigned long index, offset, field, addr, info, base_index;
+    unsigned long index, offset, field, addr, info, record;
     mttl2_entry_t *entry;
     smmtt_type type;
     smmtt_xm_perms perms = xm_perms_from_flags(flags);
@@ -333,7 +338,7 @@ static unsigned long allocate_XM_page(mttl2_entry_t *mttl2, unsigned int sdid, u
     // get the base address to search for free space. 
     addr = start_XM_addr[sdid];
     index = EXTRACT_FIELD(addr, PA_PN2);
-    base_index = index;
+    record = index;
     
 #if __riscv_xlen == 32
     type = TYPE_4M_PAGE;
@@ -369,7 +374,6 @@ static unsigned long allocate_XM_page(mttl2_entry_t *mttl2, unsigned int sdid, u
                 {
                     entry->info = INSERT_FIELD(entry->info, MTT_PERM_FIELD(offset), perms);
                     addr += XM_SIZE * (offset + 1);
-                    start_XM_addr[sdid] = addr;
                     return addr;
                 }
             }
@@ -382,11 +386,10 @@ static unsigned long allocate_XM_page(mttl2_entry_t *mttl2, unsigned int sdid, u
 
         if (index >= max) 
         {
-            start_XM_addr[sdid] = INSERT_FIELD(start_XM_addr[sdid], PA_PN2, max + 1);
             index = min;
         }
 
-    } while(index != base_index);
+    } while(index != record);
 
     return 0;
 }
@@ -399,7 +402,7 @@ static unsigned long allocate_4K_page(mttl2_entry_t *mttl2, unsigned int sdid, u
     perms_mttl1 perms = mttl1_perms_from_flags(flags);
 
     // get the base address to search for free space. 
-    addr = start_1G_addr[sdid];
+    addr = start_4K_addr[sdid];
     index = EXTRACT_FIELD(addr, PA_PN2);
     base_index = index;
     
@@ -409,8 +412,8 @@ static unsigned long allocate_4K_page(mttl2_entry_t *mttl2, unsigned int sdid, u
         
         if (entry->type == TYPE_1G_DISALLOW)
         {
-            mttl1 = mttl1_from_mttl2(entry);
             entry->type = TYPE_MTTL1_DIR;
+            mttl1 = mttl1_from_mttl2(entry);
         
             index = EXTRACT_FIELD(addr, PA_PN1);
             offset = EXTRACT_FIELD(addr, PA_PN0);
@@ -436,12 +439,11 @@ static unsigned long allocate_4K_page(mttl2_entry_t *mttl2, unsigned int sdid, u
 
                         addr = (addr & ~(PAGE_SIZE * MTTL1_FIELD - 1)) + 
                                (index * PAGE_SIZE * MTTL1_FIELD) + ((offset + 1) * PAGE_SIZE);
-                        start_4K_addr[sdid] = addr;
                         return addr;
                     }
-                    index++;
                 }
             }
+            index++;
         }
         if (entry->type == TYPE_1G_ALLOW_RW || 
             entry->type == TYPE_1G_ALLOW_RWX ||
@@ -455,10 +457,7 @@ static unsigned long allocate_4K_page(mttl2_entry_t *mttl2, unsigned int sdid, u
         }
     
         if (index >= max) 
-        {
-            start_XM_addr[sdid] = INSERT_FIELD(start_4K_addr[sdid], PA_PN2, max + 1);
             index = min;
-        }
 
     } while(index != base_index);
 
@@ -467,64 +466,41 @@ static unsigned long allocate_4K_page(mttl2_entry_t *mttl2, unsigned int sdid, u
 
 /* traverse mttl2 only */
 #if __riscv_xlen == 32
-unsigned long select_size(mttl2_entry_t *mttl2, unsigned int sdid, unsigned long size, unsigned long flags)
-{
-    unsigned long base;
-    switch (size)
-    {
-    case GiB:
-        base = allocate_1G_page(mttl2, sdid, flags, dram_base, dram_max);
-        break;
-    case XM_SIZE:
-        base = allocate_XM_page(mttl2, sdid, flags, dram_base, dram_max);
-        break;
-    case PAGE_SIZE:
-        base = allocate_4K_page(mttl2, sdid, flags, dram_base, dram_max);
-        break;
-    default:
-        base = 0;
-        break;
-    }
-    return base;
-}
-
 unsigned long allocate(unsigned long size, unsigned long flags)
 {
-    unsigned int sdid;
-    unsigned long ppn, addr, base, max;
+    unsigned long base, max;
     mttl2_entry_t *mttl2;
-
-    if ((size & (size - 1)) != 0)
-        return SBI_EINVAL;
-
-    // get the base address to search for free space. 
-    mttp_get(NULL, &sdid, &ppn);
-
+    
     mttl2 = (mttl2_entry_t *)(ppn << PAGE_SHIFT);
-
-    return select_size(mttl2, sdid, size, flags);
+    base = EXTRACT_FIELD(dram_base, PA_PN2);
+    max = EXTRACT_FIELD(dram_max, PA_PN2);
+    switch (size) {
+        case GiB:
+            base = allocate_1G_page(mttl2, sdid, flags, base, max);
+            if (base) {
+                start_1G_addr[sdid] = (base + GiB) > dram_max ? (base + GiB): dram_base;
+                return base;
+            }
+            break;
+        case XM_SIZE:
+            base = allocate_XM_page(mttl2, sdid, flags, base, max);
+            if (base) {
+                start_XM_addr[sdid] = (base + XM_SIZE) > dram_max ? (base + XM_SIZE): dram_base;
+                return base;
+            }
+            break;
+        case PAGE_SIZE:
+            base = allocate_4K_page(mttl2, sdid, flags, base, max);
+            if (base) {
+                start_4K_addr[sdid] = (base + PAGE_SIZE) > dram_max ? (base + PAGE_SIZE): dram_base;
+                return base;
+            }
+            break;
+        default: 
+            return 0;
+    }
 }
 #else
-unsigned long select_size(mttl2_entry_t *mttl2, unsigned int sdid, unsigned long size, unsigned long flags, unsigned long min, unsigned long max, unsigned long *count)
-{
-    unsigned long base = 0;
-    switch (size)
-    {
-    case GiB:
-        base = allocate_1G_page(mttl2, sdid, flags, base, max, count);
-        break;
-    case XM_SIZE:
-        base = allocate_XM_page(mttl2, sdid, flags, base, max);
-        break;
-    case PAGE_SIZE:
-        base = allocate_4K_page(mttl2, sdid, flags, base, max);
-        break;
-    default:
-        base = 0;
-        break;
-    }
-    return base;
-}
 
 unsigned long allocate(unsigned long size, unsigned long flags)
 {
@@ -532,7 +508,7 @@ unsigned long allocate(unsigned long size, unsigned long flags)
     unsigned int sdid;
     unsigned long ppn, base, max;
     mttl2_entry_t *mttl2;
-    unsigned long count = 0;
+    unsigned long record_index, increment, record = 0, *start_addr;
 
     if ((size & (size - 1)) != 0)
         return SBI_EINVAL;
@@ -540,56 +516,81 @@ unsigned long allocate(unsigned long size, unsigned long flags)
     // get the base address to search for free space. 
     mttp_get(&mode, &sdid, &ppn);
 
-    if (mode == SMMTT_56)
-    {
-        unsigned long mttl3_index, start_index;
-        mttl3_entry_t *mttl3 = (mttl3_entry_t *)(ppn << PAGE_SHIFT);
-        switch (size)
-        {
-        case GiB:      start_index = EXTRACT_FIELD(start_1G_addr[sdid], PA_PN3); break;
-        case XM_SIZE:  start_index = EXTRACT_FIELD(start_XM_addr[sdid], PA_PN3); break;
-        case PAGE_SIZE: start_index = EXTRACT_FIELD(start_4K_addr[sdid], PA_PN3); break;
-        default: return SBI_EINVAL;
-        }
-        mttl3_index = start_index;
-
-        do
-        {
-            ppn = mttl3[mttl3_index].mttl2_ppn;
-            mttl2 = (mttl2_entry_t *)(ppn << PAGE_SHIFT);
-
-            base = (mttl3_index == EXTRACT_FIELD(dram_base, PA_PN3)) 
-                        ? EXTRACT_FIELD(dram_base, PA_PN2) : 0;
-            max = (mttl3_index == EXTRACT_FIELD(dram_max, PA_PN3)) 
-                        ? EXTRACT_FIELD(dram_max, PA_PN2) : MTTL2_ENTRIES - 1;
-
-            base = select_size(mttl2, sdid, size, flags, base, max, &count);
-
-            if (base)   return base;
-
-            if (mttl3_index == EXTRACT_FIELD(dram_max, PA_PN3))
-            {
-                switch (size)
-                {
-                case GiB:      start_index = EXTRACT_FIELD(start_1G_addr[sdid], PA_PN3); break;
-                case XM_SIZE:  start_index = EXTRACT_FIELD(start_XM_addr[sdid], PA_PN3); break;
-                case PAGE_SIZE: start_index = EXTRACT_FIELD(start_4K_addr[sdid], PA_PN3); break;
-                default: return SBI_EINVAL;
-                }
-                mttl3_index = EXTRACT_FIELD(dram_base, PA_PN3);
-                count = 0;
-            }
-            else
-                mttl3_index += 1;
-        } while (mttl3_index != start_index);
+    // Set up size-dependent variables
+    switch (size) {
+        case GiB:      
+            start_addr = &start_1G_addr[sdid];
+            increment = GiB;
+            break;
+        case XM_SIZE:  
+            start_addr = &start_XM_addr[sdid];
+            increment = XM_SIZE;
+            break;
+        case PAGE_SIZE: 
+            start_addr = &start_4K_addr[sdid];
+            increment = PAGE_SIZE;
+            break;
+        default: 
+            return SBI_EINVAL;
     }
-    else 
-    {
+
+    // Get record and record_index
+    record = *start_addr;
+    record_index = EXTRACT_FIELD(record, PA_PN3);
+
+    if (mode == SMMTT_46) {
+        // For SMMTT46 mode, we only have one MTTL2 table
+        mttl2 = (mttl2_entry_t *)(ppn << PAGE_SHIFT);
         base = EXTRACT_FIELD(dram_base, PA_PN2);
         max = EXTRACT_FIELD(dram_max, PA_PN2);
-        mttl2 = (mttl2_entry_t *)(ppn << PAGE_SHIFT);
-        return select_size(mttl2, sdid, size, flags, base, max, NULL);   
+
+        switch (size) {
+            case GiB:      base = allocate_1G_page(mttl2, sdid, flags, base, max); break;
+            case XM_SIZE:  base = allocate_XM_page(mttl2, sdid, flags, base, max); break;
+            case PAGE_SIZE: base = allocate_4K_page(mttl2, sdid, flags, base, max); break;
+        }
+        return base;
     }
+
+    // SMMTT56 mode: handle multiple MTTL2 tables
+    unsigned long mttl3_index = record_index;
+    mttl3_entry_t *mttl3 = (mttl3_entry_t *)(ppn << PAGE_SHIFT);
+
+    do {
+        ppn = mttl3[mttl3_index].mttl2_ppn;
+        mttl2 = (mttl2_entry_t *)(ppn << PAGE_SHIFT);
+
+        base = (mttl3_index == EXTRACT_FIELD(dram_base, PA_PN3)) 
+                    ? EXTRACT_FIELD(dram_base, PA_PN2) : 0;
+        max = (mttl3_index == EXTRACT_FIELD(dram_max, PA_PN3)) 
+                    ? EXTRACT_FIELD(dram_max, PA_PN2) : MTTL2_ENTRIES - 1;
+        
+        // Try allocation based on size
+        switch (size) {
+            case GiB:      base = allocate_1G_page(mttl2, sdid, flags, base, max); break;
+            case XM_SIZE:  base = allocate_XM_page(mttl2, sdid, flags, base, max); break;
+            case PAGE_SIZE: base = allocate_4K_page(mttl2, sdid, flags, base, max); break;
+        }
+
+        if (base) {
+            // Update start address on successful allocation
+            *start_addr = (base + increment) > dram_max ? (base + increment) : dram_base;
+            return base;
+        }
+
+        if (mttl3_index == EXTRACT_FIELD(dram_max, PA_PN3)) {
+            // Reset to dram_base
+            *start_addr = dram_base;
+            mttl3_index = EXTRACT_FIELD(dram_base, PA_PN3);
+        } else {
+            // Move to next index
+            mttl3_index += 1;
+            *start_addr = INSERT_FIELD(*start_addr, PA_PN3, mttl3_index);
+        }
+    } while (mttl3_index != record_index);
+
+    // Restore record value
+    *start_addr = record;
     return 0;
 }
 #endif
