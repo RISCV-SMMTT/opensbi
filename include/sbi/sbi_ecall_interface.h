@@ -37,6 +37,7 @@
 #define SBI_EXT_FWFT				0x46574654
 #define SBI_EXT_SWTH				0x44444444			// domain switch
 #define SBI_EXT_DYNM				0x55555555			// dynamically modify memory of domain.
+#define SBI_EXT_TEST				0x66666666
 
 /* SBI function IDs for SWTH extension*/
 #define SBI_EXT_SWTH_EXIT				0x0

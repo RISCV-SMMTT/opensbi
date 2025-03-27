@@ -296,10 +296,9 @@ int remove(unsigned long base, unsigned long size)
 
 static unsigned long allocate_1G_page(mttl2_entry_t *mttl2, unsigned int sdid, unsigned long flags, unsigned long min, unsigned long max)
 {
-    unsigned long index, addr, count, record, i;
-    smmtt_type type;
-
-    addr = start_1G_addr[sdid];
+    int count = 0;
+    int start = *index;
+    int pos;
 
     // find free space. 
     record = EXTRACT_FIELD(addr, PA_PN2);
