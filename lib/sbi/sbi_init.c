@@ -364,6 +364,7 @@ static void __noreturn init_coldboot(struct sbi_scratch *scratch, u32 hartid)
 	sbi_boot_print_hart(scratch, hartid);
 
 	run_all_tests();
+	
 	/*
 	 * Configure hart isolation, if there is smmtt initialization,
 	 * configure smmtt, otherwise configure PMP

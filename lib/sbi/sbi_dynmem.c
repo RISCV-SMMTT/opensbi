@@ -57,7 +57,7 @@ unsigned long mttl3_get_mttl2(unsigned long ppn, uint64_t base)
 
 static int modify_1G_XM(mttl2_entry_t *mttl2, unsigned long base, smmtt_type type)
 {
-    unsigned long info, index;
+    unsigned long info = 0, index;
     mttl2_entry_t *entry;
 
     base = base & PA_1G;
@@ -123,6 +123,7 @@ static int modify_1G_page(mttl2_entry_t *mttl2, mttl2_entry_t *entry, unsigned l
     smmtt_type type = entry->type;
     unsigned long offset, field, info, index;
     smmtt_xm_perms perms;
+    int rc = 0;
 
     switch (size)
     {
@@ -135,9 +136,9 @@ static int modify_1G_page(mttl2_entry_t *mttl2, mttl2_entry_t *entry, unsigned l
         return SBI_OK;
     case XM_SIZE: 
         /* Besides this special entry,
-            * we also need to modify all other entry from 1G type to XM type
-            */
-        modify_1G_XM(mttl2, base, type);
+         * we also need to modify all other entry from 1G type to XM type
+         */
+        rc = modify_1G_XM(mttl2, base, type);
 
         offset = EXTRACT_FIELD(base, PA_XM_OFFS);
         field = MTT_PERM_FIELD(offset);
@@ -147,16 +148,18 @@ static int modify_1G_page(mttl2_entry_t *mttl2, mttl2_entry_t *entry, unsigned l
         info = INSERT_FIELD(info, field, perms);
         entry->info = info;
 
-        return SBI_OK;
+        return rc;
     case PAGE_SIZE:
         /*
          * modify all 32 entries to XM type
          * modify this entry from XM type to TYPE_MTTL1_DIR
          * modify this entry in MTTL1 
          */
-        modify_1G_XM(mttl2, base, type);
+        rc = modify_1G_XM(mttl2, base, type);
+        if (rc) return rc;
 
-        return modify_XM_4K(entry, base, type, flags);
+        rc = modify_XM_4K(entry, base, type, flags);
+        if (rc) return rc;
     default:
         return SBI_EINVAL;
     }

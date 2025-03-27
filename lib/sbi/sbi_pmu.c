@@ -94,7 +94,7 @@ static struct sbi_pmu_hw_event *hw_event_map;
 /* Maximum number of hardware events available */
 static uint32_t num_hw_events;
 /* Maximum number of hardware counters available */
-static uint32_t num_hw_ctrs;
+static uint32_t num_hw_ctrs;		// in this opensbi environment, num_hw_ctrs = 19
 
 /* Maximum number of counters available */
 static uint32_t total_ctrs;
