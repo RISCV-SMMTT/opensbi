@@ -1,11 +1,11 @@
 /*
- * SPDX-License-Identifier: BSD-2-Clause
- *
- * Copyright (c) 2020 Western Digital Corporation or its affiliates.
- *
- * Authors:
- *   Xiao Xu <xiao_xu@mail.sdu.edu.cn>
- */
+* SPDX-License-Identifier: BSD-2-Clause
+*
+* Copyright (c) 2020 Western Digital Corporation or its affiliates.
+*
+* Authors:
+*   Xiao Xu <xiao_xu@mail.sdu.edu.cn>
+*/
 
 #include <sbi/sbi_dynmem.h>
 #include <sbi/sbi_smmtt.h>
@@ -27,7 +27,7 @@ void memory_region(struct sbi_scratch *scratch)
 
     rc = fdt_path_offset((const void *)scratch->next_arg1, "/memory");
 
-	fdt_get_node_addr_size((void *)scratch->next_arg1, rc, 0, &base, &size);
+    fdt_get_node_addr_size((void *)scratch->next_arg1, rc, 0, &base, &size);
 
     dram_base = base;
     dram_size = size;
@@ -109,11 +109,11 @@ static int modify_XM_4K(mttl2_entry_t *entry, unsigned long base, smmtt_type typ
     index = EXTRACT_FIELD(base, PA_PN1);
     offset = EXTRACT_FIELD(base, PA_PN0);
 
-	field = MTT_PERM_FIELD(offset);
+    field = MTT_PERM_FIELD(offset);
 
-	// Set new permissions
+    // Set new permissions
     perms = mttl1_perms_from_flags(flags);
-	mttl1[index] = INSERT_FIELD(mttl1[index], field, perms);
+    mttl1[index] = INSERT_FIELD(mttl1[index], field, perms);
 
     return SBI_OK;
 }
@@ -136,8 +136,8 @@ static int modify_1G_page(mttl2_entry_t *mttl2, mttl2_entry_t *entry, unsigned l
         return SBI_OK;
     case XM_SIZE: 
         /* Besides this special entry,
-         * we also need to modify all other entry from 1G type to XM type
-         */
+        * we also need to modify all other entry from 1G type to XM type
+        */
         rc = modify_1G_XM(mttl2, base, type);
 
         offset = EXTRACT_FIELD(base, PA_XM_OFFS);
@@ -151,10 +151,10 @@ static int modify_1G_page(mttl2_entry_t *mttl2, mttl2_entry_t *entry, unsigned l
         return rc;
     case PAGE_SIZE:
         /*
-         * modify all 32 entries to XM type
-         * modify this entry from XM type to TYPE_MTTL1_DIR
-         * modify this entry in MTTL1 
-         */
+        * modify all 32 entries to XM type
+        * modify this entry from XM type to TYPE_MTTL1_DIR
+        * modify this entry in MTTL1 
+        */
         rc = modify_1G_XM(mttl2, base, type);
         if (rc) return rc;
 
@@ -276,9 +276,9 @@ int modify(unsigned long base, unsigned long size, unsigned long flags)
         __asm__ __volatile__("sfence.vma");
 
         /*
-         * If hypervisor mode is supported, flush caching
-         * structures in guest mode too.
-         */
+        * If hypervisor mode is supported, flush caching
+        * structures in guest mode too.
+        */
         if (misa_extension('H'))
             __sbi_hfence_gvma_all();
     }
@@ -296,9 +296,10 @@ int remove(unsigned long base, unsigned long size)
 
 static unsigned long allocate_1G_page(mttl2_entry_t *mttl2, unsigned int sdid, unsigned long flags, unsigned long min, unsigned long max)
 {
-    int count = 0;
-    int start = *index;
-    int pos;
+    unsigned long index, addr, count, record, i;
+    smmtt_type type;
+
+    addr = start_1G_addr[sdid];
 
     // find free space. 
     record = EXTRACT_FIELD(addr, PA_PN2);
