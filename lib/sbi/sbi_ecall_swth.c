@@ -58,9 +58,20 @@ static int sbi_ecall_swth_handler(unsigned long extid, unsigned long funcid,
 			sbi_smmtt_print_table(dom);
 			break;
 		case SBI_EXT_DYNM_ALOC:
+		// page_size, page_number, flags
+			allocate(2 * MiB, SBI_DOMAIN_MEMREGION_SU_RWX);
 			allocate(GiB, SBI_DOMAIN_MEMREGION_SU_RWX);
+			allocate(2 * MiB, SBI_DOMAIN_MEMREGION_SU_RWX);
+			allocate(PAGE_SIZE, SBI_DOMAIN_MEMREGION_SU_RWX);
+			break;
+		case SBI_EXT_DYNM_MODIFY:
+		// addr, size, flags
+			modify(0x100000000, GiB, SBI_DOMAIN_MEMREGION_SU_RWX);
+			modify(0xc0000000, GiB, SBI_DOMAIN_MEMREGION_SU_RWX);
 			break;
 		case SBI_EXT_DYNM_RECLAIM:
+		// addr, size
+			remove(0x100000000, GiB);
 			remove(0xc0000000, GiB);
 			break;
 		default:

@@ -21,6 +21,7 @@
 static unsigned long time_delta_off;
 static u64 (*get_time_val)(void);
 static const struct sbi_timer_device *timer_dev = NULL;
+static uint32_t index = 1;
 
 #if __riscv_xlen == 32
 static u64 get_ticks(void)
@@ -151,16 +152,45 @@ void sbi_timer_event_start(u64 next_event)
 	csr_set(CSR_MIE, MIP_MTIP);
 }
 
+void sbi_mtimer_event_start(u64 next_event)
+{
+	sbi_pmu_ctr_incr_fw(SBI_PMU_FW_SET_TIMER);
+
+	index = sbi_pmu_ctr_cfg_match(0, (1ULL << 35) - 1,
+		0, 0b11110000000000000010, 0);
+
+	sbi_pmu_ctr_start(0, 1 << index, 0, 0);
+	/**
+	 * Update the stimecmp directly if available. This allows
+	 * the older software to leverage sstc extension on newer hardware.
+	 */
+	if (timer_dev && timer_dev->timer_event_start) {
+		timer_dev->timer_event_start(next_event);
+		csr_clear(CSR_MIP, MIP_STIP);
+	}
+	csr_set(CSR_MIE, MIP_MTIP);
+}
+
 void sbi_timer_process(void)
 {
 	csr_clear(CSR_MIE, MIP_MTIP);
+
+	uint64_t cval = 0;
+
+	sbi_pmu_ctr_fw_read(index, &cval);
+	if (cval != 0)
+		sbi_printf("%ld\n", cval);
+
+	uint64_t timer_interval = 10000000;
+	uint64_t next_event = sbi_timer_value() + timer_interval;
+	sbi_mtimer_event_start(next_event);
 	/*
 	 * If sstc extension is available, supervisor can receive the timer
 	 * directly without M-mode come in between. This function should
 	 * only invoked if M-mode programs the timer for its own purpose.
 	 */
-	if (!sbi_hart_has_extension(sbi_scratch_thishart_ptr(), SBI_HART_EXT_SSTC))
-		csr_set(CSR_MIP, MIP_STIP);
+	// if (!sbi_hart_has_extension(sbi_scratch_thishart_ptr(), SBI_HART_EXT_SSTC))
+	// 	csr_set(CSR_MIP, MIP_STIP);
 }
 
 const struct sbi_timer_device *sbi_timer_get_device(void)

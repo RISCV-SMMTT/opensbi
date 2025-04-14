@@ -298,6 +298,7 @@ static unsigned long allocate_1G_page(mttl2_entry_t *mttl2, unsigned int sdid, u
 {
     unsigned long index, addr, count, record, i;
     smmtt_type type;
+    count = 0;
 
     addr = start_1G_addr[sdid];
 
@@ -315,7 +316,7 @@ static unsigned long allocate_1G_page(mttl2_entry_t *mttl2, unsigned int sdid, u
         }
 
         index = (index < max) ? index + 1 : min;
-    } while (index == record);
+    } while (index != record);
 
     if (count != 32)    
     {
