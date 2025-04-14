@@ -42,10 +42,12 @@
 /* SBI function IDs for SWTH extension*/
 #define SBI_EXT_SWTH_EXIT				0x0
 #define SBI_EXT_SWTH_ENTER				0x1
-#define SBI_EXT_SWTH_DUMP				0x2
-#define SBI_EXT_DYNM_ALOC				0x3
-#define SBI_EXT_DYNM_MODIFY				0x4
-#define SBI_EXT_DYNM_RECLAIM			0x5
+#define SBI_EXT_MTT_DUMP				0x2
+
+/* SBI function IDs for DYNM extension*/
+#define SBI_EXT_DYNM_ALOC				0x0
+#define SBI_EXT_DYNM_MODIFY				0x1
+#define SBI_EXT_DYNM_RECLAIM			0x2
 
 // /* SBI function IDs for DYNM extension*/
 // #define SBI_EXT_DYNM_ALOC				0x0

@@ -171,7 +171,7 @@ static int modify_XM_page(mttl2_entry_t *entry, unsigned long base, unsigned lon
     smmtt_type type = entry->type;
     unsigned long field, offset, info;
     smmtt_xm_perms perms;
-
+    
     switch (size)
     {
     case XM_SIZE: 
