@@ -82,6 +82,9 @@ void sbi_timer_set_delta(ulong delta);
 void sbi_timer_set_delta_upper(ulong delta_upper);
 
 /** Start timer event for current HART */
+void sbi_mtimer_event_start(u64 next_event);
+
+/** Start timer event for current HART */
 void sbi_timer_event_start(u64 next_event);
 
 /** Process timer event for current HART */

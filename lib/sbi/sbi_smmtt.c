@@ -15,11 +15,196 @@
 #include <sbi/sbi_error.h>
 #include <sbi/sbi_heap.h>
 #include <sbi/sbi_types.h>
-#include <sbi/sbi_domain.h>
 #include <sbi/sbi_console.h>
 #include <sbi_utils/fdt/fdt_helper.h>
 #include <libfdt.h>
 #include <sbi/sbi_math.h>
+#include <sbi/sbi_dynmem.h>
+
+#if __riscv_xlen == 32
+#define OFFSET_ENTRIES	8
+#else
+#define OFFSET_ENTRIES	16
+#endif
+
+void print_mttl1(mttl1_entry_t *mttl1, uintptr_t base_addr)
+{
+    if (!mttl1) return;
+
+    sbi_printf("\n========== MTTL1 Table ==========\n");
+    sbi_printf("|  Physical Addr  |  MTTL1 Entry  |  Info  |\n");
+    sbi_printf("------------------------------------------\n");
+
+    for (int i = 0; i < MTTL1_ENTRIES; i++) {
+        unsigned long addr = base_addr + (i << 16);
+        unsigned long info = mttl1[i];
+
+        if (info == 0) continue;
+
+        sbi_printf("|  0x%013lx  |  0x%016lx  |  [", addr, info);
+
+
+        for (int j = 0; j < OFFSET_ENTRIES; j++) {
+            unsigned long perms = (info >> (j * 2)) & 0x3; 
+
+            if (perms == PERMS_MTTL1_ALLOW_RWX) sbi_printf("RWX ");
+            else if (perms == PERMS_MTTL1_ALLOW_RW) sbi_printf("RW- ");
+            else if (perms == PERMS_MTTL1_ALLOW_RX) sbi_printf("R-X ");
+            else sbi_printf("--- "); 
+        }
+
+        sbi_printf("]\n"); 
+    }
+
+    sbi_printf("------------------------------------------\n");
+}
+void print_mttl2(mttl2_entry_t *mttl2, uintptr_t base_addr)
+{
+    unsigned long i;
+    if (!mttl2) return;
+    mttl1_entry_t *mttl1_list[512];  
+    uintptr_t mttl1_base_addrs[512];
+    int mttl1_count = 0;   
+    const char *type_str;
+    uintptr_t ppn;
+
+    sbi_printf("\n========== MTTL2 Table ==========\n");
+    sbi_printf("MTTL2 Table Address: 0x%lx\n", (uintptr_t)mttl2);
+    sbi_printf("|  Physical Addr  |  Type   |  Info (if any)  |\n");
+    sbi_printf("----------------------------------------------\n");
+
+    for (i = 0; i < MTTL2_ENTRIES; i++) {
+        mttl2_entry_t *entry = &mttl2[i];
+        // Calculate the actual physical address by combining the base_addr with the index
+        unsigned long addr = base_addr + (i << 25); // 32MB step
+
+        if (entry->type == 0) continue; 
+
+        unsigned long info = entry->info;
+        type_str = "UNKNOWN"; 
+
+        if (entry->type == TYPE_MTTL1_DIR) {
+            ppn = info << PAGE_SHIFT;
+            mttl1_list[mttl1_count] = (mttl1_entry_t *)ppn;
+            mttl1_base_addrs[mttl1_count] = addr;
+            mttl1_count++;
+
+            type_str = "MTTL1 DIR";
+            sbi_printf("|  0x%013lx  |  %s  |  0x%lx  |\n", addr, type_str, info);
+        } else {
+            switch (entry->type) {
+                case TYPE_1G_ALLOW_RWX: type_str = "1GB  RWX"; break;
+                case TYPE_1G_ALLOW_RW:  type_str = "1GB  RW-"; break;
+                case TYPE_1G_ALLOW_RX:  type_str = "1GB  R-X"; break;
+                case TYPE_2M_PAGE:      type_str = "2MB PAGE"; break;
+                default:                type_str = "UNKNOWN "; break;
+            }
+
+			if (entry->type == TYPE_2M_PAGE)
+			{
+				sbi_printf("|  0x%013lx  |  %s  |  ", addr, type_str);
+				for (int j = 0; j < OFFSET_ENTRIES; j++) {
+					unsigned long perms = (info >> (j * 2)) & 0x3; 
+		
+					if (perms == PERMS_MTTL1_ALLOW_RWX) sbi_printf("RWX ");
+					else if (perms == PERMS_MTTL1_ALLOW_RW) sbi_printf("RW- ");
+					else if (perms == PERMS_MTTL1_ALLOW_RX) sbi_printf("R-X ");
+					else sbi_printf("--- "); 
+				}
+				sbi_printf("\n");
+			}
+			else
+	            sbi_printf("|  0x%013lx  |  %s  |  0x%lx  |\n", addr, type_str, info);
+
+            if (entry->type == TYPE_1G_ALLOW_RWX || entry->type == TYPE_1G_ALLOW_RW || entry->type == TYPE_1G_ALLOW_RX) {
+                i += 31; 
+            }
+        }
+    }
+    sbi_printf("-----------------------------------------\n");
+
+    for (int j = 0; j < mttl1_count; j++) {
+        print_mttl1(mttl1_list[j], mttl1_base_addrs[j]);
+    }
+}
+
+void print_mttl3(mttl3_entry_t *mttl3)
+{
+    unsigned long ppn;
+    unsigned long i;
+    if (!mttl3) {
+        sbi_printf("Error: MTTL3 table is NULL!\n");
+        return;
+    }
+
+    sbi_printf("\n========== MTTL3 Table ==========\n");
+    sbi_printf("|   Index   |  Physical Addr  |  MTTL2 Addr  |\n");
+    sbi_printf("--------------------------------------------\n");
+
+
+    for (i = 0; i < 512; i++) {
+        mttl3_entry_t *entry = &mttl3[i];
+        uintptr_t base_addr = i << 39; // 512GB step
+
+        if (entry->mttl2_ppn == 0) continue; // Skip invalid entries
+
+        ppn = entry->mttl2_ppn << PAGE_SHIFT;
+        mttl2_entry_t *mttl2 = (mttl2_entry_t *)(ppn);
+        sbi_printf("| %8ld |  0x%012lx  |  0x%lx  |\n", 
+                  i, base_addr, (uintptr_t)mttl2);
+    }
+    sbi_printf("--------------------------------------------\n");
+
+    // Second pass: Print all MTTL2 tables
+    for (i = 0; i < 512; i++) {
+        mttl3_entry_t *entry = &mttl3[i];
+        if (entry->mttl2_ppn == 0) continue;
+
+        ppn = entry->mttl2_ppn << PAGE_SHIFT;
+        mttl2_entry_t *mttl2 = (mttl2_entry_t *)(ppn);
+        uintptr_t base_addr = i << 46; // 512GB step for MTTL2 base address
+        
+        sbi_printf("\nMTTL2 Table for region 0x%012lx:\n", base_addr);
+        print_mttl2(mttl2, base_addr);
+    }
+}
+
+void sbi_smmtt_print_table(struct sbi_domain *dom)
+{
+    if (!dom) {
+        sbi_printf("Error: Domain is NULL!\n");
+        return;
+    }
+
+    if (!dom->mtt) {
+        sbi_printf("Error: SMMTT Table is not initialized!\n");
+        return;
+    }
+
+    switch (dom->smmtt_mode) {
+        case SMMTT_BARE:
+            sbi_printf("SMMTT Mode: BARE (No translation)\n");
+            break;
+
+#if __riscv_xlen == 32
+        case SMMTT_34:
+#else
+        case SMMTT_46:
+#endif
+            print_mttl2((mttl2_entry_t *)dom->mtt, 0);
+            break;
+
+#if __riscv_xlen == 64
+        case SMMTT_56:
+            print_mttl3((mttl3_entry_t *)dom->mtt);
+            break;
+#endif
+
+        default:
+            sbi_printf("Error: Unsupported SMMTT mode: %d\n", dom->smmtt_mode);
+            break;
+    }
+}
 
 struct sbi_heap_control *smmtt_hpctrl = NULL;
 uint64_t smmtt_table_base, smmtt_table_size;
@@ -279,45 +464,53 @@ static int add_mttl1_region(mttl2_entry_t *entry, unsigned long base, unsigned l
 }
 
 static int add_mttl2_region(mttl2_entry_t *mttl2, unsigned long base,
-				  unsigned long size, unsigned long flags)
+                  unsigned long size, unsigned long flags)
 {
-	int rc;
-	uintptr_t index;
-	mttl2_entry_t *entry;
+    int rc = 0;
+    uintptr_t index;
+    mttl2_entry_t *entry;
 
-	while(size != 0)
-	{
-		index = EXTRACT_FIELD(base, PA_PN2);
-		entry = &mttl2[index];
-		entry->zero = 0;
 
-		if (FITS(base, size, GiB))
-		{
-			rc = add_1g_region(&mttl2[index], flags);
-			if (rc)
-				return rc;
-			size -= GiB;
-			base += GiB;
-		}
-		else if (FITS(base, size, XM_SIZE))
-		{
-			rc = add_xm_region(entry, base, flags);
-			if (rc)
-				return rc;
-			size -= XM_SIZE;
-			base += XM_SIZE;
-		}
-		else
-		{
-			rc = add_mttl1_region(entry, base, flags);
-			if (rc)
-				return rc;
-			size -= PAGE_SIZE;
-			base += PAGE_SIZE;
-		}
-	}
+    while(size != 0)
+    {
+        index = EXTRACT_FIELD(base, PA_PN2);
+        entry = &mttl2[index];
+        entry->zero = 0;
 
-	return rc;
+
+        if (FITS(base, size, GiB))
+        {
+            rc = add_1g_region(&mttl2[index], flags);
+            if (rc) {
+                sbi_printf("Failed to add 1GB region\n");
+                return rc;
+            }
+            size -= GiB;
+            base += GiB;
+        }
+        else if (FITS(base, size, XM_SIZE))
+        {
+            rc = add_xm_region(entry, base, flags);
+            if (rc) {
+                sbi_printf("Failed to add XM region\n");
+                return rc;
+            }
+            size -= XM_SIZE;
+            base += XM_SIZE;
+        }
+        else
+        {
+            rc = add_mttl1_region(entry, base, flags);
+            if (rc) {
+                sbi_printf("Failed to add MTTL1 region\n");
+                return rc;
+            }
+            size -= PAGE_SIZE;
+            base += PAGE_SIZE;
+        }
+    }
+
+    return rc;
 }
 
 #if __riscv_xlen == 64
@@ -350,21 +543,25 @@ static int add_mttl3_region(mttl3_entry_t *mttl3, unsigned long base,
 
 static int initialize_mtt(struct sbi_domain *dom, struct sbi_scratch *scratch)
 {
-	int level;
-	int rc = 0;
-	struct sbi_domain_memregion *reg;
+    int level;
+    int rc = 0;
+    struct sbi_domain_memregion *reg;
 
 	if (!dom->mtt)
 	{
 		if (dom->smmtt_mode == SMMTT_BARE)
 			dom->smmtt_mode = SMMTT_DEFAULT_MODE;
 
-		if (!sbi_hart_has_smmtt_mode(scratch, dom->smmtt_mode))
+		if (!sbi_hart_has_smmtt_mode(scratch, dom->smmtt_mode)) {
+			sbi_printf("Error: HART does not support SMMTT mode %d\n", dom->smmtt_mode);
 			return SBI_EINVAL;
+		}
 
 		rc = get_mtt_level(dom->smmtt_mode, &level);
-		if (rc)
+		if (rc) {
+			sbi_printf("Error: Invalid MTT level for mode %d\n", dom->smmtt_mode);
 			return rc;
+		}
 
 		if (level == 3)
 		{
@@ -377,23 +574,50 @@ static int initialize_mtt(struct sbi_domain *dom, struct sbi_scratch *scratch)
 			memset(dom->mtt, 0, MTTL2_SIZE);
 		}
 	
-		if (!dom->mtt)
+		if (!dom->mtt) {
+			sbi_printf("Error: Failed to allocate MTT table\n");
 			return SBI_ENOMEM;
+		}
 
 		sbi_domain_for_each_memregion(dom, reg)
 		{
-			if (!(reg->flags & SBI_DOMAIN_MEMREGION_SU_RWX))
+			// Skip regions without any permissions
+			if (!(reg->flags & SBI_DOMAIN_MEMREGION_SU_RWX)) {
 				continue;
+			}
+
+			// Ensure region is properly aligned
+			if (reg->base & (PAGE_SIZE - 1)) {
+				sbi_printf("    Error: Region base not aligned\n");
+				return SBI_EINVAL;
+			}
+
+			// Ensure region size is properly aligned
+			if (reg->size & (PAGE_SIZE - 1)) {
+				sbi_printf("    Error: Region size not aligned\n");
+				return SBI_EINVAL;
+			}
 
 #if __riscv_xlen == 64
-			if (level == 3)
-				add_mttl3_region(dom->mtt, reg->base, reg->size, reg->flags);
+			if (level == 3) {
+				rc = add_mttl3_region(dom->mtt, reg->base, reg->size, reg->flags);
+				if (rc) {
+					sbi_printf("    Failed to add MTTL3 region\n");
+					return rc;
+				}
+			}
 #endif
 
-			if (level == 2)
-				add_mttl2_region(dom->mtt, reg->base, reg->size, reg->flags);
+			if (level == 2) {
+				rc = add_mttl2_region(dom->mtt, reg->base, reg->size, reg->flags);
+				if (rc) {
+					sbi_printf("    Failed to add MTTL2 region\n");
+					return rc;
+				}
+			}
 		}
 	}
+
 
 	return rc;
 }
@@ -413,8 +637,8 @@ int sbi_hart_smmtt_configure(struct sbi_scratch *scratch)
 	pmp_set(pmp_count - 1, PMP_R | PMP_W | PMP_X, 0, __riscv_xlen);
 	pmp_set(0, 0, smmtt_table_base, log2roundup(smmtt_table_size));
 
-	// mttp_set(SMMTT_BARE, dom->index, ((uintptr_t)dom->mtt) >> PAGE_SHIFT);
 	mttp_set(dom->smmtt_mode, dom->index, ((uintptr_t)dom->mtt) >> PAGE_SHIFT);
+	// sbi_smmtt_print_table(sbi_domain_thishart_ptr());
 	return SBI_OK;
 }
 
@@ -453,7 +677,6 @@ static int setup_mtt_table()
 
 	return SBI_OK;
 }
-
 
 #define SECURE_DEVICE(status, sstatus) \
 	(!strcmp(status, "disabled") && !strcmp(sstatus, "okay"))
@@ -558,6 +781,8 @@ int sbi_smmtt_init(struct sbi_scratch *scratch, bool cold_boot)
 	
 	if (cold_boot)
 	{
+		memory_region(scratch);
+
 		rc = setup_mtt_table();
 		if (rc < 0)
 			return rc;

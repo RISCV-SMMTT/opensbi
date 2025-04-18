@@ -15,20 +15,6 @@
 #include <sbi/sbi_bitops.h>
 #include <sbi/sbi_error.h>
 
-
-#if __riscv_xlen == 32
-#define USER_BASE_ADDR  0x89000000ULL
-#define USER_MAX_ADDR   0xBFFFFFFFULL
-#else 
-#define USER_BASE_ADDR  0x4000000000ULL
-#define USER_MAX_ADDR   0x7FFFFFFFFFULL
-#endif
-
-unsigned long start_1G_index[SBI_DOMAIN_MAX_INDEX];
-unsigned long start_XM_index[SBI_DOMAIN_MAX_INDEX];
-unsigned long start_4K_index[SBI_DOMAIN_MAX_INDEX];
-unsigned long dram_max;
-
 /**
  * Modify privilege of memory.
  * @param  base base address to modify;
@@ -52,6 +38,8 @@ int remove(unsigned long base, unsigned long size);
  * @param  flags flags of new memory.
  * @return base address on success and 0 on failure
  */
-unsigned long allocate_user_memory(unsigned long size, unsigned long flags);
+unsigned long allocate(unsigned long size, unsigned long flags);
+
+void memory_region(struct sbi_scratch *scratch);
 
 #endif
