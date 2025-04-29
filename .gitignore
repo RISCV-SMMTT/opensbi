@@ -19,8 +19,7 @@ tags
 cscope*
 build.sh
 
-rv.dts
-qemu.dtb
-rv_dtb.dtb
+*.dtb
+*.dts
 lib/sbi/sbi_dynmem.c
 include/sbi/sbi_dynmem.h

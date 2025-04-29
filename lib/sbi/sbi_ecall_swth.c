@@ -24,8 +24,8 @@ static int sbi_ecall_swth_handler(unsigned long extid, unsigned long funcid,
 {
 	int ret = 0;
 	unsigned long index;
-	struct sbi_context *ctx = sbi_domain_context_thishart_ptr();
-	struct sbi_domain *dom;
+	// struct sbi_context *ctx = sbi_domain_context_thishart_ptr();
+	struct sbi_domain *dom = sbi_domain_thishart_ptr();
 	u32 i, hartindex = sbi_hartid_to_hartindex(current_hartid());
 	switch(funcid)
 	{
@@ -54,7 +54,7 @@ static int sbi_ecall_swth_handler(unsigned long extid, unsigned long funcid,
 			break;
 		case SBI_EXT_MTT_DUMP:
 			/* dump all infomation of current domain */
-			dom = ctx->dom;
+			// dom = ctx->dom;
 			sbi_smmtt_print_table(dom);
 			break;
 		default:

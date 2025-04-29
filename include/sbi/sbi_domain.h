@@ -16,6 +16,7 @@
 #include <sbi/sbi_domain_context.h>
 #include <sbi/sbi_memregion.h>
 #include <sbi/riscv_encoding.h>
+#include <sbi/sbi_smmtt.h>
 
 struct sbi_scratch;
 

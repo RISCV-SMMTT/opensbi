@@ -737,7 +737,7 @@ static int create_regions_for_devices()
 	int soc, dev, ret, i;
 	uint64_t base, size;
 	unsigned long flags;
-
+	struct sbi_domain *dom;
 	struct sbi_domain_memregion reg;
 
 	const void *fdt = fdt_get_address();
@@ -762,10 +762,14 @@ static int create_regions_for_devices()
 				}
 
 				sbi_domain_memregion_init(base, size, flags, &reg);
-				ret = sbi_domain_add_memregion(&root, &reg);
-				if(ret < 0) {
-					return ret;
+				sbi_domain_for_each(i, dom)
+				{
+					ret = sbi_domain_add_memregion(dom, &reg);
+					if(ret < 0) {
+						return ret;
+					}
 				}
+
 			}
 		}
 	}
