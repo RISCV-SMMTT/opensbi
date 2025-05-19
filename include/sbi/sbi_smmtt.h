@@ -164,6 +164,8 @@ extern struct sbi_heap_control *smmtt_hpctrl;
 		return SBI_EINVAL; \
 	}
 
+extern void *Np1;
+
 unsigned int mttp_get_sdidlen();
 
 void mttp_set(smmtt_mode_t mode, unsigned int sdid, physical_addr_t ppn);
@@ -182,5 +184,16 @@ smmtt_type mttl2_1g_type_from_flags(unsigned long flags);
 
 perms_mttl1 mttl1_perms_from_flags(unsigned long flags);
 
+int add_1g_region(mttl2_entry_t *entry, unsigned long flags);
+
+int add_xm_region(mttl2_entry_t *entry, unsigned long base, unsigned long flags);
+
+int add_mttl1_region(mttl2_entry_t *entry, unsigned long base, unsigned long flags);
+
+int add_mttl2_region(mttl2_entry_t *mttl2, unsigned long base,
+    unsigned long size, unsigned long flags);
+
 void sbi_smmtt_print_table(struct sbi_domain *dom);
+
+void sbi_smmtt_print_Np1(struct sbi_domain *dom);
 #endif   // __SBI_SMMTT_H__

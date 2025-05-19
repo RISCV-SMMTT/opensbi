@@ -43,6 +43,7 @@
 #define SBI_EXT_SWTH_EXIT				0x0
 #define SBI_EXT_SWTH_ENTER				0x1
 #define SBI_EXT_MTT_DUMP				0x2
+#define SBI_EXT_Np1_DUMP				0x3
 
 /* SBI function IDs for DYNM extension*/
 #define SBI_EXT_DYNM_ALOC				0x0

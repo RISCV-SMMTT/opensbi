@@ -57,6 +57,11 @@ static int sbi_ecall_swth_handler(unsigned long extid, unsigned long funcid,
 			// dom = ctx->dom;
 			sbi_smmtt_print_table(dom);
 			break;
+		case SBI_EXT_Np1_DUMP:
+			/* dump all infomation of current domain */
+			// dom = ctx->dom;
+			sbi_smmtt_print_Np1(dom);
+			break;
 		default:
 			return SBI_ENODEV;	
 	}

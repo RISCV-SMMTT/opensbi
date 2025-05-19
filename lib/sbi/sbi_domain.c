@@ -362,11 +362,11 @@ int sbi_domain_add_memrange(struct sbi_domain *dom, unsigned long addr, unsigned
 int sbi_domain_finalize(struct sbi_scratch *scratch, u32 cold_hartid)
 {
 	int rc;
-	u32 i, dhart;
-	struct sbi_domain *dom;
-	// u32 i, dhart, j;
-	// struct sbi_domain *dom, *tmp_dom;
-	// struct sbi_domain_memregion *reg;
+	// u32 i, dhart;
+	// struct sbi_domain *dom;
+	u32 i, dhart, j;
+	struct sbi_domain *dom, *tmp_dom;
+	struct sbi_domain_memregion *reg;
 	const struct sbi_platform *plat = sbi_platform_ptr(scratch);
 
 	/* Initialize and populate domains for the platform */
@@ -429,22 +429,22 @@ int sbi_domain_finalize(struct sbi_scratch *scratch, u32 cold_hartid)
 	}
 
 	
-	// sbi_domain_for_each(j, tmp_dom)
-	// {
-	// 	if (tmp_dom->index == 0)	continue;
+	sbi_domain_for_each(j, tmp_dom)
+	{
+		if (tmp_dom->index == 0)	continue;
 
-	// 	sbi_domain_for_each_memregion(&root, reg)
-	// 	{
-	// 		rc = sbi_domain_add_memregion(tmp_dom, reg);
-	// 		if (rc)
-	// 		{
-	// 			sbi_printf("Failed to Add region: base=0x%lx, size=0x%lx, flags=0x%lx\n",
-	// 				reg->base, reg->size, reg->flags);
-	// 			return SBI_EINVAL;
-	// 		}
-	// 	}
+		sbi_domain_for_each_memregion(&root, reg)
+		{
+			rc = sbi_domain_add_memregion(tmp_dom, reg);
+			if (rc)
+			{
+				sbi_printf("Failed to Add region: base=0x%lx, size=0x%lx, flags=0x%lx\n",
+					reg->base, reg->size, reg->flags);
+				return SBI_EINVAL;
+			}
+		}
 
-	// }
+	}
 
 	/*
 	 * Set the finalized flag so that domain

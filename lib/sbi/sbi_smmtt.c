@@ -58,6 +58,7 @@ void print_mttl1(mttl1_entry_t *mttl1, uintptr_t base_addr)
 
     sbi_printf("------------------------------------------\n");
 }
+
 void print_mttl2(mttl2_entry_t *mttl2, uintptr_t base_addr)
 {
     unsigned long i;
@@ -206,6 +207,46 @@ void sbi_smmtt_print_table(struct sbi_domain *dom)
     }
 }
 
+void *Np1 = NULL;
+
+void sbi_smmtt_print_Np1(struct sbi_domain *dom)
+{
+    if (!dom) {
+        sbi_printf("Error: Domain is NULL!\n");
+        return;
+    }
+
+    if (!Np1) {
+        sbi_printf("Error: SMMTT Table is not initialized!\n");
+        return;
+    }
+
+    switch (dom->smmtt_mode) {
+        case SMMTT_BARE:
+            sbi_printf("SMMTT Mode: BARE (No translation)\n");
+            break;
+
+#if __riscv_xlen == 32
+        case SMMTT_34:
+#else
+        case SMMTT_46:
+#endif
+            print_mttl2((mttl2_entry_t *)Np1, 0);
+            break;
+
+#if __riscv_xlen == 64
+        case SMMTT_56:
+            print_mttl3((mttl3_entry_t *)Np1);
+            break;
+#endif
+
+        default:
+            sbi_printf("Error: Unsupported SMMTT mode: %d\n", dom->smmtt_mode);
+            break;
+    }
+}
+
+
 struct sbi_heap_control *smmtt_hpctrl = NULL;
 uint64_t smmtt_table_base, smmtt_table_size;
 
@@ -313,13 +354,12 @@ smmtt_type mttl2_1g_type_from_flags(unsigned long flags)
 		return TYPE_1G_DISALLOW;
 }
 
-static int add_1g_region(mttl2_entry_t *entry, unsigned long flags)
+int add_1g_region(mttl2_entry_t *entry, unsigned long flags)
 {
 	int i;
+	smmtt_type type = mttl2_1g_type_from_flags(flags);
 	for (i = 0; i < 32; i++)
 	{
-		smmtt_type type = mttl2_1g_type_from_flags(flags);
-
 		MTTL2_FIELD_ENSURE_EQUAL(entry, type, type);
 
 		entry->info = 0;
@@ -352,7 +392,7 @@ smmtt_xm_perms xm_perms_from_flags(unsigned long flags)
 		return PERMS_XM_DISALLOW;
 }
 
-static int add_xm_region(mttl2_entry_t *entry, unsigned long base, unsigned long flags)
+int add_xm_region(mttl2_entry_t *entry, unsigned long base, unsigned long flags)
 {
 	unsigned long offset, info, perms, field;
 
@@ -431,7 +471,7 @@ perms_mttl1 mttl1_perms_from_flags(unsigned long flags)
 		return PERMS_MTTL1_DISALLOWED;
 }
 
-static int add_mttl1_region(mttl2_entry_t *entry, unsigned long base, unsigned long flags)
+int add_mttl1_region(mttl2_entry_t *entry, unsigned long base, unsigned long flags)
 {
 	unsigned long index, offset, field;
 	perms_mttl1 perms;
@@ -463,7 +503,7 @@ static int add_mttl1_region(mttl2_entry_t *entry, unsigned long base, unsigned l
 	return SBI_OK;
 }
 
-static int add_mttl2_region(mttl2_entry_t *mttl2, unsigned long base,
+int add_mttl2_region(mttl2_entry_t *mttl2, unsigned long base,
                   unsigned long size, unsigned long flags)
 {
     int rc = 0;
@@ -567,11 +607,30 @@ static int initialize_mtt(struct sbi_domain *dom, struct sbi_scratch *scratch)
 		{
 			dom->mtt = sbi_aligned_alloc_from(smmtt_hpctrl, MTTL3_SIZE, MTTL3_SIZE);
 			memset(dom->mtt, 0, MTTL3_SIZE);
+			if (!Np1)
+			{
+				Np1 = sbi_aligned_alloc_from(smmtt_hpctrl, MTTL3_SIZE, MTTL3_SIZE);
+				if (Np1)	
+					sbi_printf("correctly allocated Np1: %p\n", Np1);
+				memset(Np1, 0, MTTL3_SIZE);
+			}
 		}
 		else
 		{
 			dom->mtt = sbi_aligned_alloc_from(smmtt_hpctrl, MTTL2_SIZE, MTTL2_SIZE);
+			if (!dom->mtt)
+			{
+				sbi_printf("Error: Failed to allocate MTT table\n");
+				return SBI_ENOMEM;
+			}
 			memset(dom->mtt, 0, MTTL2_SIZE);
+			if (!Np1)
+			{
+				Np1 = sbi_aligned_alloc_from(smmtt_hpctrl, MTTL2_SIZE, MTTL2_SIZE);
+				if (Np1)	
+				sbi_printf("correctly allocated Np1: %p\n", Np1);
+				memset(Np1, 0, MTTL2_SIZE);
+			}
 		}
 	
 		if (!dom->mtt) {
@@ -613,6 +672,26 @@ static int initialize_mtt(struct sbi_domain *dom, struct sbi_scratch *scratch)
 				if (rc) {
 					sbi_printf("    Failed to add MTTL2 region\n");
 					return rc;
+				}
+			}
+			if (check_mem(reg))
+			{
+#if __riscv_xlen == 64
+				if (level == 3) {
+					rc = add_mttl3_region(Np1, reg->base, reg->size, reg->flags);
+					if (rc) {
+						sbi_printf("    Failed to add MTTL3 region\n");
+						return rc;
+					}
+				}
+#endif
+	
+				if (level == 2) {
+					rc = add_mttl2_region(Np1, reg->base, reg->size, reg->flags);
+					if (rc) {
+						sbi_printf("    Failed to add MTTL2 region\n");
+						return rc;
+					}
 				}
 			}
 		}
@@ -737,7 +816,7 @@ static int create_regions_for_devices()
 	int soc, dev, ret, i;
 	uint64_t base, size;
 	unsigned long flags;
-	struct sbi_domain *dom;
+	// struct sbi_domain *dom;
 	struct sbi_domain_memregion reg;
 
 	const void *fdt = fdt_get_address();
@@ -762,13 +841,14 @@ static int create_regions_for_devices()
 				}
 
 				sbi_domain_memregion_init(base, size, flags, &reg);
-				sbi_domain_for_each(i, dom)
-				{
-					ret = sbi_domain_add_memregion(dom, &reg);
-					if(ret < 0) {
-						return ret;
-					}
-				}
+				ret = sbi_domain_add_memregion(&root, &reg);
+				// sbi_domain_for_each(i, dom)
+				// {
+				// 	ret = sbi_domain_add_memregion(dom, &reg);
+				// 	if(ret < 0) {
+				// 		return ret;
+				// 	}
+				// }
 
 			}
 		}
@@ -785,16 +865,16 @@ int sbi_smmtt_init(struct sbi_scratch *scratch, bool cold_boot)
 	
 	if (cold_boot)
 	{
-		memory_region(scratch);
-
 		rc = setup_mtt_table();
 		if (rc < 0)
 			return rc;
-	
+
+		memory_region(scratch, Np1);
+
 		rc = create_regions_for_devices();
 		if (rc < 0)
 			return rc;
 	}
-
+	// sbi_smmtt_print_Np1(&root);
 	return rc;
 }
