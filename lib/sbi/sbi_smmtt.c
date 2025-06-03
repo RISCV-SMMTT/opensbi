@@ -510,7 +510,6 @@ int add_mttl2_region(mttl2_entry_t *mttl2, unsigned long base,
     uintptr_t index;
     mttl2_entry_t *entry;
 
-
     while(size != 0)
     {
         index = EXTRACT_FIELD(base, PA_PN2);
