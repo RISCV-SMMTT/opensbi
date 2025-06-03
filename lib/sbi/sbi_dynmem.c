@@ -33,7 +33,7 @@ bool check_mem(struct sbi_domain_memregion *reg)
     return false;
 }
 
-void memory_region(struct sbi_scratch *scratch, void *mtt)
+void memory_region(struct sbi_scratch *scratch)
 {
     int rc;
     uint64_t base, size;
@@ -41,9 +41,6 @@ void memory_region(struct sbi_scratch *scratch, void *mtt)
     rc = fdt_path_offset((const void *)scratch->next_arg1, "/memory");
 
     fdt_get_node_addr_size((void *)scratch->next_arg1, rc, 0, &base, &size);
-
-    mtt = sbi_aligned_alloc_from(smmtt_hpctrl, MTTL2_SIZE, MTTL2_SIZE);
-    memset(mtt, 0, MTTL2_SIZE);
 
     dram_base = base;
     dram_size = size;

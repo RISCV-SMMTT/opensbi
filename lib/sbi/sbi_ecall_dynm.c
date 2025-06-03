@@ -31,10 +31,11 @@ static int sbi_ecall_dynm_handler(unsigned long extid, unsigned long funcid,
     {
         case SBI_EXT_DYNM_ALOC:
         // allocate memory for current domain.
-                addr = allocate(page_size, flags);
-                if (addr == 0)
-                    return SBI_ENOMEM;
-                regs->a2 = addr;
+            addr = allocate(page_size, flags);
+            if (addr == 0)
+                return SBI_ENOMEM;
+            ret = SBI_OK;
+            out->value = addr;
             break;
         case SBI_EXT_DYNM_MODIFY:
         // modify memory for current domain.

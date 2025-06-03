@@ -40,7 +40,7 @@ int remove(unsigned long base, unsigned long size);
  */
 unsigned long allocate(unsigned long size, unsigned long flags);
 
-void memory_region(struct sbi_scratch *scratch, void * mtt);
+void memory_region(struct sbi_scratch *scratch);
 
 /**
  * Allocate memory.

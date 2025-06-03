@@ -217,7 +217,7 @@ void sbi_smmtt_print_Np1(struct sbi_domain *dom)
     }
 
     if (!Np1) {
-        sbi_printf("Error: SMMTT Table is not initialized!\n");
+        sbi_printf("Error: Np1 Table is not initialized!\n");
         return;
     }
 
@@ -517,7 +517,6 @@ int add_mttl2_region(mttl2_entry_t *mttl2, unsigned long base,
         entry = &mttl2[index];
         entry->zero = 0;
 
-
         if (FITS(base, size, GiB))
         {
             rc = add_1g_region(&mttl2[index], flags);
@@ -606,14 +605,12 @@ static int initialize_mtt(struct sbi_domain *dom, struct sbi_scratch *scratch)
 		if (level == 3)
 		{
 			dom->mtt = sbi_aligned_alloc_from(smmtt_hpctrl, MTTL3_SIZE, MTTL3_SIZE);
-			memset(dom->mtt, 0, MTTL3_SIZE);
-			if (!Np1)
+			if (!dom->mtt)
 			{
-				Np1 = sbi_aligned_alloc_from(smmtt_hpctrl, MTTL3_SIZE, MTTL3_SIZE);
-				if (Np1)	
-					sbi_printf("correctly allocated Np1: %p\n", Np1);
-				memset(Np1, 0, MTTL3_SIZE);
+				sbi_printf("Error: Failed to allocate MTT table\n");
+				return SBI_ENOMEM;
 			}
+			memset(dom->mtt, 0, MTTL3_SIZE);
 		}
 		else
 		{
@@ -624,13 +621,6 @@ static int initialize_mtt(struct sbi_domain *dom, struct sbi_scratch *scratch)
 				return SBI_ENOMEM;
 			}
 			memset(dom->mtt, 0, MTTL2_SIZE);
-			if (!Np1)
-			{
-				Np1 = sbi_aligned_alloc_from(smmtt_hpctrl, MTTL2_SIZE, MTTL2_SIZE);
-				if (Np1)	
-				sbi_printf("correctly allocated Np1: %p\n", Np1);
-				memset(Np1, 0, MTTL2_SIZE);
-			}
 		}
 	
 		if (!dom->mtt) {
@@ -674,26 +664,6 @@ static int initialize_mtt(struct sbi_domain *dom, struct sbi_scratch *scratch)
 					return rc;
 				}
 			}
-			if (check_mem(reg))
-			{
-#if __riscv_xlen == 64
-				if (level == 3) {
-					rc = add_mttl3_region(Np1, reg->base, reg->size, reg->flags);
-					if (rc) {
-						sbi_printf("    Failed to add MTTL3 region\n");
-						return rc;
-					}
-				}
-#endif
-	
-				if (level == 2) {
-					rc = add_mttl2_region(Np1, reg->base, reg->size, reg->flags);
-					if (rc) {
-						sbi_printf("    Failed to add MTTL2 region\n");
-						return rc;
-					}
-				}
-			}
 		}
 	}
 
@@ -701,11 +671,111 @@ static int initialize_mtt(struct sbi_domain *dom, struct sbi_scratch *scratch)
 	return rc;
 }
 
+static int initialize_Np1(struct sbi_domain *dom, struct sbi_scratch *scratch)
+{
+    int level;
+    int rc = 0;
+    struct sbi_domain_memregion *reg;
+
+	if (!Np1)
+	{
+		if (dom->smmtt_mode == SMMTT_BARE)
+			dom->smmtt_mode = SMMTT_DEFAULT_MODE;
+
+		if (!sbi_hart_has_smmtt_mode(scratch, dom->smmtt_mode)) {
+			sbi_printf("Error: HART does not support SMMTT mode %d\n", dom->smmtt_mode);
+			return SBI_EINVAL;
+		}
+
+		rc = get_mtt_level(dom->smmtt_mode, &level);
+		if (rc) {
+			sbi_printf("Error: Invalid MTT level for mode %d\n", dom->smmtt_mode);
+			return rc;
+		}
+
+		if (level == 3)
+		{
+			Np1 = sbi_aligned_alloc_from(smmtt_hpctrl, MTTL3_SIZE, MTTL3_SIZE);
+			if (!Np1)
+			{
+				sbi_printf("Error: Failed to allocate N+1 MTT table\n");
+				return SBI_ENOMEM;
+			}
+			memset(Np1, 0, MTTL3_SIZE);
+		}
+		else
+		{
+			Np1 = sbi_aligned_alloc_from(smmtt_hpctrl, MTTL2_SIZE, MTTL2_SIZE);
+			if (!Np1)
+			{
+				sbi_printf("Error: Failed to allocate N+1 MTT table\n");
+				return SBI_ENOMEM;
+			}
+			memset(Np1, 0, MTTL2_SIZE);
+		}
+	
+		if (!Np1) {
+			sbi_printf("Error: Failed to allocate N+1 MTT table\n");
+			return SBI_ENOMEM;
+		}
+
+		sbi_domain_for_each_memregion(dom, reg)
+		{
+			// Skip regions without any permissions
+			if (!(reg->flags & SBI_DOMAIN_MEMREGION_SU_RWX)) {
+				continue;
+			}
+
+			if (!check_mem(reg))
+			{
+				continue;
+			}
+
+			// Ensure region is properly aligned
+			if (reg->base & (PAGE_SIZE - 1)) {
+				sbi_printf("    Error: Region base not aligned\n");
+				return SBI_EINVAL;
+			}
+
+			// Ensure region size is properly aligned
+			if (reg->size & (PAGE_SIZE - 1)) {
+				sbi_printf("    Error: Region size not aligned\n");
+				return SBI_EINVAL;
+			}
+
+#if __riscv_xlen == 64
+			if (level == 3) {
+				rc = add_mttl3_region(Np1, reg->base, reg->size, reg->flags);
+				if (rc) {
+					sbi_printf("    Failed to add MTTL3 region\n");
+					return rc;
+				}
+			}
+#endif
+
+			if (level == 2) {
+				rc = add_mttl2_region(Np1, reg->base, reg->size, reg->flags);
+				if (rc) {
+					sbi_printf("    Failed to add MTTL2 region\n");
+					return rc;
+				}
+			}
+		}
+	}
+
+	return rc;
+}
+
+
 int sbi_hart_smmtt_configure(struct sbi_scratch *scratch)
 {
 	int rc;
 	struct sbi_domain *dom = sbi_domain_thishart_ptr();
 	unsigned int pmp_count = sbi_hart_pmp_count(scratch);
+
+	rc = initialize_Np1(dom, scratch);
+	if (rc)
+		return rc;
 
 	/* initialize MTT table */
 	rc = initialize_mtt(dom, scratch);
@@ -842,14 +912,6 @@ static int create_regions_for_devices()
 
 				sbi_domain_memregion_init(base, size, flags, &reg);
 				ret = sbi_domain_add_memregion(&root, &reg);
-				// sbi_domain_for_each(i, dom)
-				// {
-				// 	ret = sbi_domain_add_memregion(dom, &reg);
-				// 	if(ret < 0) {
-				// 		return ret;
-				// 	}
-				// }
-
 			}
 		}
 	}
@@ -869,7 +931,7 @@ int sbi_smmtt_init(struct sbi_scratch *scratch, bool cold_boot)
 		if (rc < 0)
 			return rc;
 
-		memory_region(scratch, Np1);
+		memory_region(scratch);
 
 		rc = create_regions_for_devices();
 		if (rc < 0)
