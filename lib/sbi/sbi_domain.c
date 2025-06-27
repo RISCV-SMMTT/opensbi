@@ -519,17 +519,17 @@ int sbi_domain_init(struct sbi_scratch *scratch, u32 cold_hartid)
 
 	fdt_get_node_addr_size((void *)scratch->next_arg1, rc, 0, &base, &size);
 
-	sbi_domain_memregion_init(0x80000000, 0x40000000,
-			(SBI_DOMAIN_MEMREGION_SU_READABLE |
-			SBI_DOMAIN_MEMREGION_SU_WRITABLE |
-			SBI_DOMAIN_MEMREGION_SU_EXECUTABLE),
-			&root_memregs[root.memregs_count++]);
+	// sbi_domain_memregion_init(0x80000000, 0x40000000,
+	// 		(SBI_DOMAIN_MEMREGION_SU_READABLE |
+	// 		SBI_DOMAIN_MEMREGION_SU_WRITABLE |
+	// 		SBI_DOMAIN_MEMREGION_SU_EXECUTABLE),
+	// 		&root_memregs[root.memregs_count++]);
 
-	// sbi_domain_memregion_init(base, size,
-	// 	(SBI_DOMAIN_MEMREGION_SU_READABLE |
-	// 	SBI_DOMAIN_MEMREGION_SU_WRITABLE |
-	// 	SBI_DOMAIN_MEMREGION_SU_EXECUTABLE),
-	// 	&root_memregs[root.memregs_count++]);
+	sbi_domain_memregion_init(base, size,
+		(SBI_DOMAIN_MEMREGION_SU_READABLE |
+		SBI_DOMAIN_MEMREGION_SU_WRITABLE |
+		SBI_DOMAIN_MEMREGION_SU_EXECUTABLE),
+		&root_memregs[root.memregs_count++]);
 
 	/* Root domain memory region end */
 	root_memregs[root.memregs_count].size = 0;

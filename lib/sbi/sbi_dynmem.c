@@ -93,158 +93,191 @@ static int modify_1G_XM(mttl2_entry_t *mttl2, unsigned long base, smmtt_type typ
     return SBI_OK;
 }
 
-static int modify_1G_page(mttl2_entry_t *mttl2, mttl2_entry_t *entry, unsigned long base, unsigned long size, unsigned long flags)
+static int modify_1G_page(mttl2_entry_t *mttl2, mttl2_entry_t *entry, unsigned long base, unsigned long size)
 {
-    smmtt_type type = entry->type;
-    unsigned long offset, field, info, index;
-    smmtt_xm_perms perms;
-    int rc = 0;
+    // smmtt_type type = entry->type;
+    // unsigned long offset, field, info;
+    // smmtt_xm_perms perms;
+    // int rc = 0;
 
-    switch (size)
+    int i;
+    for (i = 0; i < 32; i++)
     {
-    case GiB:
-        // only need to modify entry->type to new flags.
-        type = mttl2_1g_type_from_flags(flags);
-        for (index = 0; index < 32; index++)
-            (entry + index)->type = type;
-
-        return SBI_OK;
-    case XM_SIZE: 
-        /* Besides this special entry,
-        * we also need to modify all other entry from 1G type to XM type
-        */
-        rc = modify_1G_XM(mttl2, base, type);
-
-        offset = EXTRACT_FIELD(base, PA_XM_OFFS);
-        field = MTT_PERM_FIELD(offset);
-        info = entry->info;
-    
-        perms = xm_perms_from_flags(flags);
-        info = INSERT_FIELD(info, field, perms);
-        entry->info = info;
-
-        return rc;
-    case PAGE_SIZE:
-        /*
-        * modify all 32 entries to XM type
-        * modify this entry from XM type to TYPE_MTTL1_DIR
-        * modify this entry in MTTL1 
-        */
-       return SBI_EINVAL;
-        // rc = modify_1G_XM(mttl2, base, type);
-        // if (rc) return rc;
-
-        // rc = modify_XM_4K(entry, base, type, flags);
-        // if (rc) return rc;
-    default:
-        return SBI_EINVAL;
-    }
-}
-
-static int modify_XM_page(mttl2_entry_t *entry, unsigned long base, unsigned long size, unsigned long flags)
-{
-    int rc;
-    unsigned long field, offset, info;
-    smmtt_xm_perms perms;
-    
-    switch (size)
-    {
-    case XM_SIZE: 
-        offset = EXTRACT_FIELD(base, PA_XM_OFFS);
-        field = MTT_PERM_FIELD(offset);
-        info = entry->info;
-    
-        perms = xm_perms_from_flags(flags);
-        info = INSERT_FIELD(info, field, perms);
-        entry->info = info;
-
-        return SBI_OK;
-    case PAGE_SIZE:
-        return SBI_EINVAL;
-    // return modify_XM_4K(entry, base, type, flags);
-    default:
-        return SBI_EINVAL;
-    }
-    
-    return rc;
-}
-
-static int modify_4K_page(mttl2_entry_t *entry, unsigned long base, unsigned long size, unsigned long flags)
-{
-    unsigned long field, offset, index, mttl1_ppn;
-    mttl1_entry_t *mttl1;
-    perms_mttl1 perms;
-
-    mttl1_ppn = entry->info;
-    mttl1 = (mttl1_entry_t *)(mttl1_ppn << PAGE_SHIFT);
-
-    if (size == PAGE_SIZE)
-    {
-        index = EXTRACT_FIELD(base, PA_PN1);
-        offset = EXTRACT_FIELD(base, PA_PN0);
-
-        perms = mttl1_perms_from_flags(flags);
-        field = MTT_PERM_FIELD(offset);
-        mttl1[index] = INSERT_FIELD(mttl1[index], field, perms);
-
-        return SBI_OK;
-    }
-    else
-        return SBI_EINVAL;
-}
-
-static int modify_section_page(mttl2_entry_t *entry, unsigned long base, unsigned long size, unsigned long flags)
-{
-    unsigned long index, count;
-    smmtt_xm_perms perms = xm_perms_from_flags(flags);
-    index = 0;
-    uint64_t info = 0;
-    for (int i = 0; i < 16; i++) {
-        info <<= 2;
-        info |= perms;
-    }
-    if (size < 128 * MiB || (size % 128 * MiB != 0))
-    {
-        sbi_printf("modify section page size must be 128M or larger.\n");
-        return 0;
-    }
-    count = size / (128 * MiB);
-
-    while (count)
-    {
-        if (entry[index].type == TYPE_MTTL1_DIR || entry[index].type == TYPE_1G_DISALLOW)
+        if (entry->type != TYPE_1G_ALLOW_RX && entry->type != TYPE_1G_ALLOW_RW && entry->type != TYPE_1G_ALLOW_RWX)
         {
-            sbi_printf("modify section page type must not be TYPE_MTTL1_DIR or TYPE_1G_DISALLOW.\n");
+            sbi_printf("modify 1G page type must be TYPE_1G_DISALLOW or TYPE_1G_ALLOW_RX or TYPE_1G_ALLOW_RW or TYPE_1G_ALLOW_RWX.\n");
             return SBI_EINVAL;
         }
-        if (entry[index].type == TYPE_2M_PAGE)
+        else
         {
-            if (entry[index].info != info)
-            {
-                sbi_printf("modify section page type must be TYPE_2M_PAGE.\n");
-                return SBI_EINVAL;
-            }
+            entry->type = 0;
         }
-        index++;
-        count--;
-    }
-
-    while(index)
-    {
-        entry[index].type = TYPE_1G_DISALLOW;
-        entry[index].info = 0;
-        index--;
-        count++;
+        entry += 1;
     }
     return SBI_OK;
+    // switch (size)
+    // {
+    // case GiB:
+    //     // only need to modify entry->type to new flags.
+    //     type = mttl2_1g_type_from_flags(flags);
+    //     for (index = 0; index < 32; index++)
+    //         (entry + index)->type = type;
+
+    //     return SBI_OK;
+    // case XM_SIZE: 
+    //     /* Besides this special entry,
+    //     * we also need to modify all other entry from 1G type to XM type
+    //     */
+    //     rc = modify_1G_XM(mttl2, base, type);
+
+    //     offset = EXTRACT_FIELD(base, PA_XM_OFFS);
+    //     field = MTT_PERM_FIELD(offset);
+    //     info = entry->info;
+    
+    //     perms = xm_perms_from_flags(flags);
+    //     info = INSERT_FIELD(info, field, perms);
+    //     entry->info = info;
+
+    //     return rc;
+    // case PAGE_SIZE:
+    //     /*
+    //     * modify all 32 entries to XM type
+    //     * modify this entry from XM type to TYPE_MTTL1_DIR
+    //     * modify this entry in MTTL1 
+    //     */
+    //    return SBI_EINVAL;
+    //     // rc = modify_1G_XM(mttl2, base, type);
+    //     // if (rc) return rc;
+
+    //     // rc = modify_XM_4K(entry, base, type, flags);
+    //     // if (rc) return rc;
+    // default:
+    //     return SBI_EINVAL;
+    // }
 }
+
+static int modify_XM_page(mttl2_entry_t *mttl2, mttl2_entry_t *entry, unsigned long base, unsigned long size)
+{
+    int rc;
+    
+    if (entry->type == TYPE_1G_DISALLOW || entry->type == TYPE_MTTL1_DIR)
+    {
+        sbi_printf("modify XM page type must not be TYPE_1G_DISALLOW or TYPE_MTTL1_DIR.\n");
+        return SBI_EINVAL;
+    }
+    else
+    {
+        if (entry->type == TYPE_2M_PAGE)
+        {
+            entry->info = 0;
+            entry->type = TYPE_1G_DISALLOW;
+            return SBI_OK;
+        }
+        else
+        {
+            rc = modify_1G_XM(mttl2, base, 0);   // this need to modify
+            if (rc) return rc;
+        }
+    }
+    return SBI_OK;
+    // switch (size)
+    // {
+    // case XM_SIZE: 
+    //     offset = EXTRACT_FIELD(base, PA_XM_OFFS);
+    //     field = MTT_PERM_FIELD(offset);
+    //     info = entry->info;
+    
+    //     perms = xm_perms_from_flags(flags);
+    //     info = INSERT_FIELD(info, field, perms);
+    //     entry->info = info;
+
+    //     return SBI_OK;
+    // case PAGE_SIZE:
+    //     return SBI_EINVAL;
+    // // return modify_XM_4K(entry, base, type, flags);
+    // default:
+    //     return SBI_EINVAL;
+    // }
+    
+    // return rc;
+}
+
+// static int modify_4K_page(mttl2_entry_t *entry, unsigned long base, unsigned long size, unsigned long flags)
+// {
+//     unsigned long field, offset, index, mttl1_ppn;
+//     mttl1_entry_t *mttl1;
+//     perms_mttl1 perms;
+
+//     mttl1_ppn = entry->info;
+//     mttl1 = (mttl1_entry_t *)(mttl1_ppn << PAGE_SHIFT);
+
+//     if (size == PAGE_SIZE)
+//     {
+//         index = EXTRACT_FIELD(base, PA_PN1);
+//         offset = EXTRACT_FIELD(base, PA_PN0);
+
+//         perms = mttl1_perms_from_flags(flags);
+//         field = MTT_PERM_FIELD(offset);
+//         mttl1[index] = INSERT_FIELD(mttl1[index], field, perms);
+
+//         return SBI_OK;
+//     }
+//     else
+//         return SBI_EINVAL;
+// }
+
+// static int modify_section_page(mttl2_entry_t *entry, unsigned long base, unsigned long size, unsigned long flags)
+// {
+//     unsigned long index, count;
+//     smmtt_xm_perms perms = xm_perms_from_flags(flags);
+//     index = 0;
+//     uint64_t info = 0;
+//     for (int i = 0; i < 16; i++) {
+//         info <<= 2;
+//         info |= perms;
+//     }
+//     if (size < 128 * MiB || (size % 128 * MiB != 0))
+//     {
+//         sbi_printf("modify section page size must be 128M or larger.\n");
+//         return 0;
+//     }
+//     count = size / (128 * MiB);
+
+//     while (count)
+//     {
+//         if (entry[index].type == TYPE_MTTL1_DIR || entry[index].type == TYPE_1G_DISALLOW)
+//         {
+//             sbi_printf("modify section page type must not be TYPE_MTTL1_DIR or TYPE_1G_DISALLOW.\n");
+//             return SBI_EINVAL;
+//         }
+//         if (entry[index].type == TYPE_2M_PAGE)
+//         {
+//             if (entry[index].info != info)
+//             {
+//                 sbi_printf("modify section page type must be TYPE_2M_PAGE.\n");
+//                 return SBI_EINVAL;
+//             }
+//         }
+//         index++;
+//         count--;
+//     }
+
+//     while(index)
+//     {
+//         entry[index].type = TYPE_1G_DISALLOW;
+//         entry[index].info = 0;
+//         index--;
+//         count++;
+//     }
+//     return SBI_OK;
+// }
 
 
 /* @return 0 on success and -1 on failure*/
 int modify(unsigned long base, unsigned long size, unsigned long flags)
 {
     smmtt_mode_t mode;
-    mttl2_entry_t *mttl2, *entry, *Np1_mttl2;
+    mttl2_entry_t *mttl2, *entry, *Np1_mttl2, *Np1_entry;
     unsigned long ppn, index, Np1_ppn;
 
     mttp_get(&mode, NULL, &ppn);
@@ -272,8 +305,8 @@ int modify(unsigned long base, unsigned long size, unsigned long flags)
     Np1_mttl2 = (mttl2_entry_t *)Np1;
 #endif
 
-    if ((size & (size - 1)) != 0)
-        return SBI_EINVAL;
+    // if ((size & (size - 1)) != 0)
+    //     return SBI_EINVAL;
 
     // no privilege for this domain at this PA, no need for modify 
     if (!mttl2)
@@ -282,34 +315,57 @@ int modify(unsigned long base, unsigned long size, unsigned long flags)
     // mttl2 entry of this PA. 
     index = EXTRACT_FIELD(base, PA_PN2);
     entry = &mttl2[index];
+    Np1_entry = &Np1_mttl2[index];
 
-    switch (entry->type)
+    int count = size / (32 * MiB);
+    while (count)
     {
-    case TYPE_1G_DISALLOW:
-        return SBI_OK;
-    case TYPE_1G_ALLOW_RWX:
-    case TYPE_1G_ALLOW_RW:
-    case TYPE_1G_ALLOW_RX:
-        if (modify_1G_page(mttl2, entry, base, size, flags) || modify_1G_page(Np1_mttl2, &Np1_mttl2[index], base, size, flags))
-            return SBI_EINVAL;
-        break;
-#if __riscv_xlen == 32
-    case TYPE_4M_PAGE:
-#else
-    case TYPE_2M_PAGE:
-#endif
-        if (modify_XM_page(entry, base, size, flags) || modify_XM_page(&Np1_mttl2[index], base, size, flags))
-            return SBI_EINVAL;
-        break;
-    case TYPE_MTTL1_DIR:
-        if (modify_4K_page(entry, base, size, flags) || modify_4K_page(&Np1_mttl2[index], base, size, flags))
-            return SBI_EINVAL;
-        break;
-    default:
-        if (modify_section_page(entry, base, size, flags) || modify_section_page(&Np1_mttl2[index], base, size, flags))
-            return SBI_EINVAL;
-        break;
+        if (count >= 32)
+        {
+            modify_1G_page(mttl2, entry, base, size);
+            modify_1G_page(Np1_mttl2, Np1_entry, base, size);
+            count -= 32;
+            base += GiB;
+            entry += 32;
+            Np1_entry += 32;
+        }
+        else 
+        {
+            modify_XM_page(mttl2, entry, base, size);
+            modify_XM_page(Np1_mttl2, Np1_entry, base, size);
+            count -= 1;
+            base += 32 * MiB;
+            entry += 1;
+            Np1_entry += 1;
+        }
     }
+//     switch (entry->type)
+//     {
+//     case TYPE_1G_DISALLOW:
+//         return SBI_OK;
+//     case TYPE_1G_ALLOW_RWX:
+//     case TYPE_1G_ALLOW_RW:
+//     case TYPE_1G_ALLOW_RX:
+//         if (modify_1G_page(mttl2, entry, base, size, flags) || modify_1G_page(Np1_mttl2, &Np1_mttl2[index], base, size, flags))
+//             return SBI_EINVAL;
+//         break;
+// #if __riscv_xlen == 32
+//     case TYPE_4M_PAGE:
+// #else
+//     case TYPE_2M_PAGE:
+// #endif
+//         if (modify_XM_page(entry, base, size, flags) || modify_XM_page(&Np1_mttl2[index], base, size, flags))
+//             return SBI_EINVAL;
+//         break;
+//     case TYPE_MTTL1_DIR:
+//         if (modify_4K_page(entry, base, size, flags) || modify_4K_page(&Np1_mttl2[index], base, size, flags))
+//             return SBI_EINVAL;
+//         break;
+//     default:
+//         if (modify_section_page(entry, base, size, flags) || modify_section_page(&Np1_mttl2[index], base, size, flags))
+//             return SBI_EINVAL;
+//         break;
+//     }
 
     if (misa_extension('S')) {
         __asm__ __volatile__("sfence.vma");

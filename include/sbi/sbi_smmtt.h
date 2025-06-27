@@ -166,6 +166,8 @@ extern struct sbi_heap_control *smmtt_hpctrl;
 
 extern void *Np1;
 
+extern uint64_t smmtt_table_base, smmtt_table_size;
+
 unsigned int mttp_get_sdidlen();
 
 void mttp_set(smmtt_mode_t mode, unsigned int sdid, physical_addr_t ppn);
@@ -194,6 +196,8 @@ int add_mttl2_region(mttl2_entry_t *mttl2, unsigned long base,
     unsigned long size, unsigned long flags);
 
 void sbi_smmtt_print_table(struct sbi_domain *dom);
+
+bool addr_in_smmtt_table(uintptr_t addr, unsigned long size);
 
 void sbi_smmtt_print_Np1(struct sbi_domain *dom);
 #endif   // __SBI_SMMTT_H__

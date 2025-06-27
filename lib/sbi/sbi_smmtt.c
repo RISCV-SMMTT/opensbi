@@ -250,6 +250,18 @@ void sbi_smmtt_print_Np1(struct sbi_domain *dom)
 struct sbi_heap_control *smmtt_hpctrl = NULL;
 uint64_t smmtt_table_base, smmtt_table_size;
 
+// bool addr_in_smmtt_table(uintptr_t addr, unsigned long size)
+// {
+// 	if (!smmtt_hpctrl || !smmtt_table_base || !smmtt_table_size) {
+// 		return false;
+// 	}
+
+// 	uintptr_t start = smmtt_table_base;
+// 	uintptr_t end = smmtt_table_base + smmtt_table_size;
+
+// 	return !(end <= addr || start >= addr + size);
+// }
+
 /* MTTP handling */
 unsigned int mttp_get_sdidlen()
 {
