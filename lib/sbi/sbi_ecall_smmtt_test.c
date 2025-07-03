@@ -15,6 +15,7 @@
 #include <sbi/riscv_asm.h>
 #include <sbi/sbi_smmtt_test.h>
 #include <sbi/sbi_smmtt.h>
+#include <sbi/sbi_console.h>
 
 bool mttl3_entry_check(mttl3_entry_t *mttl3) {
 	if (mttl3->mttl2_ppn != 0 && mttl3->zero == 0) {
@@ -40,7 +41,7 @@ bool mttl2_entry_check(mttl2_entry_t *mttl2) {
 
 bool mttl1_entry_check(mttl1_entry_t* mttl1)
 {
-	if (*mttl1 & MTTL1_PERMS_ZERO_MASK == 0) {
+	if ((*mttl1 & MTTL1_PERMS_ZERO_MASK) == 0) {
 		return true;
 	}
 	return false;
@@ -76,17 +77,18 @@ static int smmtt_test_mttp_rw(struct sbi_ecall_return* out)
 
 	if (test_mode == mode && test_sdid == sdid && test_ppn == ppn) {
 		out->value = SBI_OK;
+		sbi_printf("smmtt test mttp rw test passed\n");
 		ret = SBI_OK;
-	} else {
+	}
+	else {
 		out->value = SBI_EFAIL;
+		sbi_printf("smmtt test mttp rw test failed\n");
 		ret = SBI_EFAIL;
 	}
 	return ret;
 }
 
-static int mttl3_decode_valid(struct sbi_trap_regs* regs,
-				struct sbi_ecall_return* out)
-{
+static int mttl3_decode_valid(struct sbi_trap_regs* regs, struct sbi_ecall_return* out) {
 	/*
 	* MTTL3 decode valid test
 	* TODO: Not yet implemented, return ok
@@ -94,13 +96,12 @@ static int mttl3_decode_valid(struct sbi_trap_regs* regs,
 
 	int ret = 0;
 	out->value = SBI_OK;
+	sbi_printf("smmtt test mttl3 decode valid test passed\n");
 	ret = SBI_OK;
 	return ret;
 }
 
-static int mttl3_decode_ppn(struct sbi_trap_regs* regs,
-				struct sbi_ecall_return* out)
-{
+static int mttl3_decode_ppn(struct sbi_trap_regs* regs, struct sbi_ecall_return* out) {
 	/*
 	* MTTL3 decode PPN test
 	*/
@@ -114,6 +115,7 @@ static int mttl3_decode_ppn(struct sbi_trap_regs* regs,
 	if (mode != SMMTT_56) {
 		// If mode is not SMMTT_56, it means that mttl3 is not used, return ok.
 		out->value = SBI_OK;
+		sbi_printf("smmtt test mttl3 decode ppn test passed\n");
 		ret = SBI_OK;
 		return ret;
 	}
@@ -123,18 +125,19 @@ static int mttl3_decode_ppn(struct sbi_trap_regs* regs,
 	if (mttl3_entry->mttl2_ppn) {
 		// ppn is not zero, decode success.
 		out->value = SBI_OK;
+		sbi_printf("smmtt test mttl3 decode ppn test passed\n");
 		ret = SBI_OK;
-	} else {
+	}
+	else {
 		out->value = SBI_EFAIL;
+		sbi_printf("smmtt test mttl3 decode ppn test failed\n");
 		ret = SBI_EFAIL;
 	}
 
 	return ret;
 }
 
-static int mttl2_decode_type(struct sbi_trap_regs* regs,
-				struct sbi_ecall_return* out)
-{
+static int mttl2_decode_type(struct sbi_trap_regs* regs, struct sbi_ecall_return* out) {
 	/*
 	* MTTL2 decode type test
 	*/
@@ -149,28 +152,27 @@ static int mttl2_decode_type(struct sbi_trap_regs* regs,
 	if (mode != SMMTT_56) {
 		// If mode is not SMMTT_56, it means that mttl3 is not used, we can get mttl2 entry directly
 		mttl2_entry = (mttl2_entry_t*)(mttp_ppn << PAGE_SHIFT);
-	} else {
-		mttl3_entry_t* mttl3_entry =
-			(mttl3_entry_t*)(mttp_ppn << PAGE_SHIFT);
-		mttl2_entry =
-			(mttl2_entry_t*)(uintptr_t)(mttl3_entry->mttl2_ppn
-				<< PAGE_SHIFT);
+	}
+	else {
+		mttl3_entry_t* mttl3_entry = (mttl3_entry_t*)(mttp_ppn << PAGE_SHIFT);
+		mttl2_entry = (mttl2_entry_t*)(uintptr_t)(mttl3_entry->mttl2_ppn << PAGE_SHIFT);
 	}
 
 	// Check type
 	if (mttl2_entry->type >= 0 && mttl2_entry->type <= 6) {
 		out->value = SBI_OK;
+		sbi_printf("smmtt test mttl2 decode type test passed\n");
 		ret = SBI_OK;
-	} else {
+	}
+	else {
 		out->value = SBI_EFAIL;
+		sbi_printf("smmtt test mttl2 decode type test failed\n");
 		ret = SBI_EFAIL;
 	}
 	return ret;
 }
 
-static int mttl2_decode_info(struct sbi_trap_regs* regs,
-				struct sbi_ecall_return* out)
-{
+static int mttl2_decode_info(struct sbi_trap_regs* regs, struct sbi_ecall_return* out) {
 	/*
 	* MTTL2 decode info test
 	*/
@@ -185,12 +187,10 @@ static int mttl2_decode_info(struct sbi_trap_regs* regs,
 	// Get mttl2 entry
 	if (mode != SMMTT_56) {
 		mttl2_entry = (mttl2_entry_t*)(mttp_ppn << PAGE_SHIFT);
-	} else {
-		mttl3_entry_t* mttl3_entry =
-			(mttl3_entry_t*)(mttp_ppn << PAGE_SHIFT);
-		mttl2_entry =
-			(mttl2_entry_t*)(uintptr_t)(mttl3_entry->mttl2_ppn
-				<< PAGE_SHIFT);
+	}
+	else {
+		mttl3_entry_t* mttl3_entry = (mttl3_entry_t*)(mttp_ppn << PAGE_SHIFT);
+		mttl2_entry = (mttl2_entry_t*)(uintptr_t)(mttl3_entry->mttl2_ppn << PAGE_SHIFT);
 	}
 
 	// Save info
@@ -200,9 +200,12 @@ static int mttl2_decode_info(struct sbi_trap_regs* regs,
 	mttl2_entry->info = 0x7;
 	if (mttl2_entry->info == 7) {
 		out->value = SBI_OK;
+		sbi_printf("smmtt test mttl2 decode info test passed\n");
 		ret = SBI_OK;
-	} else {
+	}
+	else {
 		out->value = SBI_EFAIL;
+		sbi_printf("smmtt test mttl2 decode info test failed\n");
 		ret = SBI_EFAIL;
 	}
 
@@ -212,9 +215,7 @@ static int mttl2_decode_info(struct sbi_trap_regs* regs,
 	return ret;
 }
 
-static int mttl1_decode_perm(struct sbi_trap_regs* regs,
-				struct sbi_ecall_return* out)
-{
+static int mttl1_decode_perm(struct sbi_trap_regs* regs, struct sbi_ecall_return* out) {
 	/*
 	* MTTL1 decode perm test
 	*/
@@ -230,7 +231,8 @@ static int mttl1_decode_perm(struct sbi_trap_regs* regs,
 	// Get mttl2 entry
 	if (mode != SMMTT_56) {
 		mttl2_entry = (mttl2_entry_t*)(mttp_ppn << PAGE_SHIFT);
-	} else {
+	} 
+	else {
 		mttl3_entry_t* mttl3_entry =
 			(mttl3_entry_t*)(mttp_ppn << PAGE_SHIFT);
 		mttl2_entry =
@@ -244,25 +246,27 @@ static int mttl1_decode_perm(struct sbi_trap_regs* regs,
 		}
 	}
 	// Save info
-	uintptr_t pre_info = mttl1_entry;
-	mttl1_entry = 0x7;
+	uintptr_t pre_info = *mttl1_entry;
+	*mttl1_entry = 0x7;
 
-	if (mttl1_entry == 7) {
+	if (*mttl1_entry == 7) {
 		out->value = SBI_OK;
+		sbi_printf("smmtt test mttl1 decode perm test passed\n");
 		ret = SBI_OK;
-	} else {
+	} 
+	else {
 		out->value = SBI_EFAIL;
+		sbi_printf("smmtt test mttl1 decode perm test failed\n");
 		ret = SBI_EFAIL;
 	}
 
 	// Restore info
-	mttl1_entry = pre_info;
+	*mttl1_entry = pre_info;
 
 	return ret;
 }
 
-static int mttp_bare(struct sbi_trap_regs* regs, struct sbi_ecall_return* out)
-{
+static int mttp_bare(struct sbi_trap_regs* regs, struct sbi_ecall_return* out) {
 	/*
 	* MTTP bare test
 	*/
@@ -274,16 +278,18 @@ static int mttp_bare(struct sbi_trap_regs* regs, struct sbi_ecall_return* out)
 
 	if (mode == SMMTT_BARE && mttp_ppn == 0) {
 		out->value = SBI_OK;
+		sbi_printf("smmtt test mttp bare test passed\n");
 		ret = SBI_OK;
-	}else {
+	}
+	else {
 		out->value = SBI_EFAIL;
+		sbi_printf("smmtt test mttp bare test failed\n");
 		ret = SBI_EFAIL;
 	}
 	return ret;
 }
 
-static int smmtt34(struct sbi_trap_regs* regs, struct sbi_ecall_return* out)
-{
+static int smmtt34(struct sbi_trap_regs* regs, struct sbi_ecall_return* out) {
 	/*
 	* SMMTT34 test
 	*/
@@ -294,27 +300,30 @@ static int smmtt34(struct sbi_trap_regs* regs, struct sbi_ecall_return* out)
 
 	// Get mttp ppn and mode
 	mttp_get(&mode, NULL, &mttp_ppn);
-	if(mode != SMMTT_34) {
-		out->value = SBI_EFAIL;
-		ret = SBI_EFAIL;
-		return ret;
-	}
+#if __riscv_xlen != 32
+	out->value = SBI_EFAIL;
+	sbi_printf("smmtt test smmtt34 test failed, mode is not SMMTT_34\n");
+	ret = SBI_EFAIL;
+	return ret;
+#endif
 
 	// Get mttl2 entry
 	mttl2_entry = (mttl2_entry_t*)(mttp_ppn << PAGE_SHIFT);
 	if(mttl2_entry_check(mttl2_entry)) {
 		out->value = SBI_OK;
+		sbi_printf("smmtt test smmtt34 test passed\n");
 		ret = SBI_OK;
-	}else {
+	}
+	else {
 		out->value = SBI_EFAIL;
+		sbi_printf("smmtt test smmtt34 test failed\n");
 		ret = SBI_EFAIL;
 	}
 
 	return ret;
 }
 
-static int smmtt46(struct sbi_trap_regs* regs, struct sbi_ecall_return* out)
-{
+static int smmtt46(struct sbi_trap_regs* regs, struct sbi_ecall_return* out) {
 	/*
 	* SMMTT46 test
 	*/
@@ -327,6 +336,7 @@ static int smmtt46(struct sbi_trap_regs* regs, struct sbi_ecall_return* out)
 	mttp_get(&mode, NULL, &mttp_ppn);
 	if (mode != SMMTT_46) {
 		out->value = SBI_EFAIL;
+		sbi_printf("smmtt test smmtt46 test failed, mode is not SMMTT_46\n");
 		ret = SBI_EFAIL;
 		return ret;
 	}
@@ -335,17 +345,19 @@ static int smmtt46(struct sbi_trap_regs* regs, struct sbi_ecall_return* out)
 	mttl2_entry = (mttl2_entry_t*)(mttp_ppn << PAGE_SHIFT);
 	if (mttl2_entry_check(mttl2_entry)) {
 		out->value = SBI_OK;
+		sbi_printf("smmtt test smmtt46 test passed\n");
 		ret = SBI_OK;
-	} else {
+	} 
+	else {
 		out->value = SBI_EFAIL;
+		sbi_printf("smmtt test smmtt46 test failed\n");
 		ret = SBI_EFAIL;
 	}
 
 	return ret;
 }
 
-static int smmtt56(struct sbi_trap_regs* regs, struct sbi_ecall_return* out)
-{
+static int smmtt56(struct sbi_trap_regs* regs, struct sbi_ecall_return* out) {
 	/*
 	* SMMTT56 test
 	*/
@@ -358,6 +370,7 @@ static int smmtt56(struct sbi_trap_regs* regs, struct sbi_ecall_return* out)
 	mttp_get(&mode, NULL, &mttp_ppn);
 	if (mode != SMMTT_56) {
 		out->value = SBI_EFAIL;
+		sbi_printf("smmtt test smmtt56 test failed, mode is not SMMTT_56\n");
 		ret = SBI_EFAIL;
 		return ret;
 	}
@@ -366,17 +379,19 @@ static int smmtt56(struct sbi_trap_regs* regs, struct sbi_ecall_return* out)
 	mttl3_entry = (mttl3_entry_t*)(mttp_ppn << PAGE_SHIFT);
 	if (mttl3_entry_check(mttl3_entry)) {
 		out->value = SBI_OK;
+		sbi_printf("smmtt test smmtt56 test passed\n");
 		ret = SBI_OK;
-	} else {
+	} 
+	else {
 		out->value = SBI_EFAIL;
+		sbi_printf("smmtt test smmtt56 test failed\n");
 		ret = SBI_EFAIL;
 	}
 
 	return ret;
 }
 
-static int mttp_ppn(struct sbi_trap_regs* regs, struct sbi_ecall_return* out)
-{
+static int mttp_ppn(struct sbi_trap_regs* regs, struct sbi_ecall_return* out) {
 	/*
 	* MTTP PPN test
 	*/
@@ -391,6 +406,7 @@ static int mttp_ppn(struct sbi_trap_regs* regs, struct sbi_ecall_return* out)
 	mttp_get(&mode, NULL, &mttp_ppn);
 	if (mode == SMMTT_BARE || mttp_ppn == 0) {
 		out->value = SBI_EFAIL;
+		sbi_printf("smmtt test mttp ppn test failed, mode is SMMTT_BARE or mttp_ppn is zero\n");
 		ret = SBI_EFAIL;
 		return ret;
 	}
@@ -398,18 +414,22 @@ static int mttp_ppn(struct sbi_trap_regs* regs, struct sbi_ecall_return* out)
 		mttl3_entry = (mttl3_entry_t*)(mttp_ppn << PAGE_SHIFT);
 		if (mttl3_entry_check(mttl3_entry)) {
 			out->value = SBI_OK;
+			sbi_printf("smmtt test mttp ppn test passed\n");
 			ret = SBI_OK;
 		} else {
 			out->value = SBI_EFAIL;
+			sbi_printf("smmtt test mttp ppn test failed\n");
 			ret = SBI_EFAIL;
 		}
 	} else {
 		mttl2_entry = (mttl2_entry_t*)(mttp_ppn << PAGE_SHIFT);
 		if (mttl2_entry_check(mttl2_entry)) {
 			out->value = SBI_OK;
+			sbi_printf("smmtt test mttp ppn test passed\n");
 			ret = SBI_OK;
 		} else {
 			out->value = SBI_EFAIL;
+			sbi_printf("smmtt test mttp ppn test failed\n");
 			ret = SBI_EFAIL;
 		}
 	}
@@ -417,10 +437,9 @@ static int mttp_ppn(struct sbi_trap_regs* regs, struct sbi_ecall_return* out)
 	return ret;
 }
 
-static int mttl3_valid(struct sbi_trap_regs* regs, struct sbi_ecall_return* out)
-{
+static int mttl3_valid(struct sbi_trap_regs* regs, struct sbi_ecall_return* out) {
 	/*
-	* MTTP PPN test
+	* MTTP level3 pte.valid test
 	* TODO: Not yet implemented, return ok
 	*/
 	int ret = 0;
@@ -429,40 +448,43 @@ static int mttl3_valid(struct sbi_trap_regs* regs, struct sbi_ecall_return* out)
 	return ret;
 }
 
-static int mttl3_ppn(struct sbi_trap_regs* regs, struct sbi_ecall_return* out)
-{
+static int mttl3_ppn(struct sbi_trap_regs* regs, struct sbi_ecall_return* out) {
 	/*
-	* MTTP PPN test
+	* MTTP level3 pte.PPN test
 	*/
 	int ret = 0;
 	physical_addr_t mttp_ppn = 0;
 
 	smmtt_mode_t mode = 0;
 	mttl3_entry_t* mttl3_entry = NULL;
+	mttl2_entry_t* mttl2_entry = NULL;
 
 	// Get mttp ppn and mode
 	mttp_get(&mode, NULL, &mttp_ppn);
 	if (mode != SMMTT_56 || mttp_ppn == 0) {
 		out->value = SBI_EFAIL;
+		sbi_printf("smmtt test mttl3 ppn test failed, mode is not SMMTT_56 or mttp_ppn is zero\n");
 		ret = SBI_EFAIL;
 		return ret;
 	}
 	mttl3_entry = (mttl3_entry_t*)(mttp_ppn << PAGE_SHIFT);
-	if (mttl3_entry_check(mttl3_entry)) {
+	mttl2_entry = (mttl2_entry_t*)((uintptr_t)mttl3_entry->mttl2_ppn << PAGE_SHIFT);
+	if (mttl2_entry_check(mttl2_entry)) {
 		out->value = SBI_OK;
+		sbi_printf("smmtt test mttl3 ppn test passed\n");
 		ret = SBI_OK;
-	} else {
+	} 
+	else {
 		out->value = SBI_EFAIL;
+		sbi_printf("smmtt test mttl3 ppn test failed\n");
 		ret = SBI_EFAIL;
 	}
 	return ret;
 }
 
-static int handle_1g_xxx(struct sbi_trap_regs* regs,
-				struct sbi_ecall_return* out)
-{
+static int handle_1g_xxx(struct sbi_trap_regs* regs, struct sbi_ecall_return* out) {
 	/*
-	* MTTP PPN test
+	* MTTP level2 pte.info test
 	*/
 	int ret = -1;
 	physical_addr_t mttp_ppn = 0;
@@ -470,36 +492,89 @@ static int handle_1g_xxx(struct sbi_trap_regs* regs,
 	smmtt_mode_t mode = 0;
 	mttl3_entry_t* mttl3_entry = NULL;
 	mttl2_entry_t* mttl2_entry = NULL;
-	mttl1_entry_t* mttl1_entry = NULL;
+//	mttl1_entry_t* mttl1_entry = NULL;
 
 	// Get mttp ppn and mode
 	mttp_get(&mode, NULL, &mttp_ppn);
-	if (mode != SMMTT_56 || mttp_ppn == 0) {
+	if ((mode != SMMTT_56 && mode != SMMTT_46) || mttp_ppn == 0) {
 		out->value = SBI_EFAIL;
+		sbi_printf("smmtt test 1g xxx test failed, mode is wrong or mttp_ppn is zero\n");
 		ret = SBI_EFAIL;
 		return ret;
 	}
 	if (mode == SMMTT_56) {
 		mttl3_entry = (mttl3_entry_t*)(mttp_ppn << PAGE_SHIFT);
-		mttl2_entry = (mttl2_entry_t*)(mttl3_entry->mttl2_ppn << PAGE_SHIFT);
-	} else {
+		mttl2_entry = (mttl2_entry_t*)((uintptr_t)mttl3_entry->mttl2_ppn << PAGE_SHIFT);
+	} 
+	else {
 		mttl2_entry = (mttl2_entry_t*)(mttp_ppn << PAGE_SHIFT);
 	}
 	for (int i = 0; i <= MTTL2_ENTRIES; mttl2_entry++, i++) {
-		if (mttl2_entry->type & TYPE_1G_XXX_MASK != 0) {
+		if ((mttl2_entry->type & TYPE_1G_XXX_MASK) == 0 && mttl2_entry->type!=0) {
 			mtt_1g_info_check(mttl2_entry, out);
 			ret = out->value;
 			break;
 		}
 	}
-
+	if (ret != SBI_OK) {
+		sbi_printf("smmtt test 1g xxx test failed\n");
+	}
+	else if(ret == SBI_OK) {
+		sbi_printf("smmtt test 1g xxx test passed\n");
+	}
 	return ret;
 }
 
-static int mtt_l1_dir(struct sbi_trap_regs* regs, struct sbi_ecall_return* out)
-{
+static int mtt_l1_dir(struct sbi_trap_regs* regs, struct sbi_ecall_return* out) {
 	/*
-	* MTTP PPN test
+	* MTTP level2 pte.info test
+	*/
+	int ret = 0;
+	physical_addr_t mttp_ppn = 0;
+	smmtt_mode_t mode = 0;
+	mttl2_entry_t* mttl2_entry = NULL;
+	mttl1_entry_t* mttl1_entry = NULL;
+
+	// Get mttp ppn and mode
+	mttp_get(&mode, NULL, &mttp_ppn);
+
+	// Get mttl2 entry
+	if (mode != SMMTT_56) {
+		mttl2_entry = (mttl2_entry_t*)(mttp_ppn << PAGE_SHIFT);
+	} 
+	else {
+		mttl3_entry_t* mttl3_entry =
+			(mttl3_entry_t*)(mttp_ppn << PAGE_SHIFT);
+		mttl2_entry =
+			(mttl2_entry_t*)(uintptr_t)(mttl3_entry->mttl2_ppn
+				<< PAGE_SHIFT);
+	}
+	for (int i = 0; i <= MTTL2_ENTRIES; mttl2_entry++, i++) {
+		if(mttl2_entry->type == TYPE_MTTL1_DIR) {
+			mttl1_entry = (mttl1_entry_t*)(uintptr_t)(mttl2_entry->info << PAGE_SHIFT);
+			break;
+		}
+	}
+	if (mttl1_entry_check(mttl1_entry)) {
+		out->value = SBI_OK;
+		ret = SBI_OK;
+	}
+	else {
+		out->value = SBI_EFAIL;
+		ret = SBI_EFAIL;
+	}
+	if (ret == SBI_OK) {
+		sbi_printf("smmtt test mtt l1 dir test passed\n");
+	} 
+	else {
+		sbi_printf("smmtt test mtt l1 dir test failed\n");
+	}
+	return ret;
+}
+
+static int handle_4m_pages(struct sbi_trap_regs* regs, struct sbi_ecall_return* out) {
+	/*
+	* MTTP level2 pte.info test
 	* TODO: Not yet implemented, return ok
 	*/
 	int ret = 0;
@@ -508,24 +583,9 @@ static int mtt_l1_dir(struct sbi_trap_regs* regs, struct sbi_ecall_return* out)
 	return ret;
 }
 
-static int handle_4m_pages(struct sbi_trap_regs* regs,
-				struct sbi_ecall_return* out)
-{
+static int handle_2m_pages(struct sbi_trap_regs* regs, struct sbi_ecall_return* out) {
 	/*
-	* MTTP PPN test
-	* TODO: Not yet implemented, return ok
-	*/
-	int ret = 0;
-	out->value = SBI_OK;
-	ret = SBI_OK;
-	return ret;
-}
-
-static int handle_2m_pages(struct sbi_trap_regs* regs,
-				struct sbi_ecall_return* out)
-{
-	/*
-	* MTTP PPN test
+	* MTTP level2 pte.info test
 	* TODO: Not yet implemented, return ok
 	*/
 	int ret = 0;
