@@ -33,8 +33,10 @@ bool mttl2_entry_check(mttl2_entry_t *mttl2) {
 
 #if __riscv_xlen == 32
 #define MTTL1_PERMS_ZERO_MASK _ULL(0xCCCCCCCC)
+#define MTTL2_4M_PAGES_ZERO_MASK _ULL(0x3F0000)
 #else
 #define MTTL1_PERMS_ZERO_MASK _ULL(0xCCCCCCCCCCCCCCCC)
+#define MTTL2_2M_PAGES_ZERO_MASK _ULL(0xFFF00000000)
 #endif
 
 #define TYPE_1G_XXX_MASK    0b100
@@ -492,7 +494,6 @@ static int handle_1g_xxx(struct sbi_trap_regs* regs, struct sbi_ecall_return* ou
 	smmtt_mode_t mode = 0;
 	mttl3_entry_t* mttl3_entry = NULL;
 	mttl2_entry_t* mttl2_entry = NULL;
-//	mttl1_entry_t* mttl1_entry = NULL;
 
 	// Get mttp ppn and mode
 	mttp_get(&mode, NULL, &mttp_ppn);
@@ -555,6 +556,7 @@ static int mtt_l1_dir(struct sbi_trap_regs* regs, struct sbi_ecall_return* out) 
 			break;
 		}
 	}
+	// Check mttl1 entry
 	if (mttl1_entry_check(mttl1_entry)) {
 		out->value = SBI_OK;
 		ret = SBI_OK;
@@ -578,9 +580,38 @@ static int handle_4m_pages(struct sbi_trap_regs* regs, struct sbi_ecall_return* 
 	* TODO: Not yet implemented, return ok
 	*/
 	int ret = 0;
-	out->value = SBI_OK;
-	ret = SBI_OK;
+#if __riscv_xlen != 32
+	out->value = SBI_EFAIL;
+	sbi_printf("smmtt test 4M pages test failed, mode is not SMMTT_34\n");
+	ret = SBI_EFAIL;
 	return ret;
+#elif __riscv_xlen == 32
+	physical_addr_t mttp_ppn = 0;
+	smmtt_mode_t mode = 0;
+	mttl2_entry_t* mttl2_entry = NULL;
+	// Get mttp ppn and mode
+	mttp_get(&mode, NULL, &mttp_ppn);
+
+	// Get mttl2 entry
+	mttl2_entry = (mttl2_entry_t*)(mttp_ppn << PAGE_SHIFT);
+
+	for (int i = 0; i <= MTTL2_ENTRIES; mttl2_entry++, i++) {
+		if(mttl2_entry->type == TYPE_4M_PAGE) {
+			if ((mttl2_entry->info & MTTL2_4M_PAGES_ZERO_MASK) == 0) {
+				out->value = SBI_OK;
+				sbi_printf("smmtt test 4M pages test passed\n");
+				ret = SBI_OK;
+			} 
+			else {
+				out->value = SBI_EFAIL;
+				sbi_printf("smmtt test 4M pages test failed\n");
+				ret = SBI_EFAIL;
+			}
+			break;
+		}
+	}
+	return ret;
+#endif
 }
 
 static int handle_2m_pages(struct sbi_trap_regs* regs, struct sbi_ecall_return* out) {
@@ -589,9 +620,46 @@ static int handle_2m_pages(struct sbi_trap_regs* regs, struct sbi_ecall_return* 
 	* TODO: Not yet implemented, return ok
 	*/
 	int ret = 0;
-	out->value = SBI_OK;
-	ret = SBI_OK;
+#if __riscv_xlen == 32
+	out->value = SBI_EFAIL;
+	sbi_printf("smmtt test 2M pages test failed, mode is not SMMTT_46/56\n");
+	ret = SBI_EFAIL;
 	return ret;
+#elif __riscv_xlen == 64
+	physical_addr_t mttp_ppn = 0;
+	smmtt_mode_t mode = 0;
+	mttl2_entry_t* mttl2_entry = NULL;
+	// Get mttp ppn and mode
+	mttp_get(&mode, NULL, &mttp_ppn);
+
+	// Get mttl2 entry
+	if (mode != SMMTT_56) {
+		mttl2_entry = (mttl2_entry_t*)(mttp_ppn << PAGE_SHIFT);
+	} 
+	else {
+		mttl3_entry_t* mttl3_entry =
+			(mttl3_entry_t*)(mttp_ppn << PAGE_SHIFT);
+		mttl2_entry =
+			(mttl2_entry_t*)(uintptr_t)(mttl3_entry->mttl2_ppn
+				<< PAGE_SHIFT);
+	}
+	for (int i = 0; i <= MTTL2_ENTRIES; mttl2_entry++, i++) {
+		if(mttl2_entry->type == TYPE_2M_PAGE) {
+			if ((mttl2_entry->info & MTTL2_2M_PAGES_ZERO_MASK) == 0) {
+				out->value = SBI_OK;
+				sbi_printf("smmtt test 2m pages test passed\n");
+				ret = SBI_OK;
+			} 
+			else {
+				out->value = SBI_EFAIL;
+				sbi_printf("smmtt test 2m pages test failed\n");
+				ret = SBI_EFAIL;
+			}
+			break;
+		}
+	}
+	return ret;
+#endif
 }
 
 static int sbi_ecall_smmtt_test_handler(unsigned long extid,
