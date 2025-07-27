@@ -29,6 +29,7 @@ enum sbi_ext_test_fid {
 	SBI_EXT_MTT_L1_DIR = 0xF,
 	SBI_EXT_4M_PAGES = 0x10,
 	SBI_EXT_2M_PAGES = 0x11,
+	SBI_EXT_MTTP_WARL = 0x12,
 };
 
 #endif

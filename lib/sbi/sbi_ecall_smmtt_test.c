@@ -5,6 +5,7 @@
  *
  * Authors:
  *   Xindong Fan <fanxindong@mail.sdu.edu.cn>
+ * 	 Hao Wang 	 <202417044@mail.sdu.edu.cn>
  */
 
 #include <sbi/sbi_ecall.h>
@@ -662,6 +663,45 @@ static int handle_2m_pages(struct sbi_trap_regs* regs, struct sbi_ecall_return* 
 #endif
 }
 
+static int mttp_warl_test(struct sbi_trap_regs* regs, struct sbi_ecall_return* out) {
+	/*
+	* MTTP WARL test
+	*/
+	int ret = 0;
+	smmtt_mode_t pre_mode = 0, mode = 3, test_mode = 0;
+	unsigned int pre_sdid = 0, sdid = 67, test_sdid = 0;
+	physical_addr_t pre_ppn = 0, ppn = 9999, test_ppn = 0;
+
+	// Save current values in mttp
+	mttp_get(&pre_mode, &pre_sdid, &pre_ppn);
+
+	// Write all illegal values to mttp and get values back
+	mttp_set(mode, sdid, ppn);
+	mttp_get(&test_mode, &test_sdid, &test_ppn);
+	sbi_printf("smmtt test mttp warl test: pre_mode=%d, pre_sdid=%u, pre_ppn=%lu\n",
+			pre_mode, pre_sdid, pre_ppn);
+	sbi_printf("smmtt test mttp warl test: mode=%d, sdid=%u, ppn=%lu\n",
+			test_mode, test_sdid, test_ppn);
+	// Reset back old values
+	mttp_set(pre_mode, pre_sdid, pre_ppn);
+
+	/*
+	 * Check the values .
+	 * We expect the read-back value to differ from the written value due to WARL.
+	 */
+	if (test_mode == mode && test_sdid == sdid && test_ppn == ppn) {
+		out->value = SBI_EFAIL;
+		sbi_printf("smmtt test mttp rw test failed\n");
+		ret = SBI_EFAIL;
+	}
+	else {
+		out->value = SBI_OK;
+		sbi_printf("smmtt test mttp rw test passed\n");
+		ret = SBI_OK;
+	}
+	return ret;
+}
+
 static int sbi_ecall_smmtt_test_handler(unsigned long extid,
 				unsigned long funcid,
 				struct sbi_trap_regs* regs,
@@ -722,6 +762,9 @@ static int sbi_ecall_smmtt_test_handler(unsigned long extid,
 		break;
 	case SBI_EXT_2M_PAGES:
 		ret = handle_2m_pages(regs, out);
+		break;
+	case SBI_EXT_MTTP_WARL:
+		ret = mttp_warl_test(regs, out);
 		break;
 	default:
 		ret = SBI_ENODEV;
