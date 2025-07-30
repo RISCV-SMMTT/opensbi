@@ -81,6 +81,8 @@ enum sbi_hart_extensions {
 	SBI_HART_EXT_SSCTR,
 	/** HART has Ssstateen extension **/
 	SBI_HART_EXT_SSSTATEEN,
+	/** Hart has Smsdid extension */
+	SBI_HART_EXT_SMSDID, 
 
 	/** Maximum index of Hart extension */
 	SBI_HART_EXT_MAX,

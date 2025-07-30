@@ -40,7 +40,7 @@
 #define SBI_EXT_MPXY				0x4D505859
 #define SBI_EXT_SWTH				0x44444444			// domain switch
 
-/* SBI function IDs for DOMSW extension*/
+/* SBI function IDs for SWTH extension*/
 #define SBI_EXT_SWTH_EXIT				0x0
 #define SBI_EXT_SWTH_ENTER				0x1
 
