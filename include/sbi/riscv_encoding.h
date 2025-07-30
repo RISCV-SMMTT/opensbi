@@ -444,7 +444,7 @@
 #define CSR_VSIREG6         		0x257
 
 /* Supervisor Domain Identifier Extension */
-#define CSR_MTTP				0x3e0
+#define CSR_MMPT				0x3e0
 
 /* VS-Level Interrupts (H-extension with AIA) */
 #define CSR_VSTOPEI			0x25c
