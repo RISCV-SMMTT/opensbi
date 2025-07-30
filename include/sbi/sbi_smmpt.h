@@ -12,12 +12,14 @@
 #define MMPT32_SDID_MASK      (unsigned long)0x0FC00000
 #define MMPT32_MODE_SHIFT		30
 #define MMPT32_PPN_MASK       (unsigned long)0x003FFFFF
+#define SMMPT32_DEFAULT_MODE (SMMPT_34)
 
 #define MMPT64_MODE_MASK      (unsigned long long)0xF000000000000000
 #define MMPT64_SDID_SHIFT		54
 #define MMPT64_SDID_MASK      (unsigned long long)0x03F0000000000000
 #define MMPT64_MODE_SHIFT		60
 #define MMPT64_PPN_MASK       (unsigned long long)0x00000FFFFFFFFFFF
+#define SMMPT64_DEFAULT_MODE (SMMPT_43)
 
 #if __riscv_xlen == 32
 
@@ -26,6 +28,8 @@
 #define MMPT_SDID_MASK   MMPT32_SDID_MASK
 #define MMPT_SDID_SHIFT   MMPT32_SDID_SHIFT
 #define MMPT_PPN_MASK    MMPT32_PPN_MASK
+#define SMMPT_DEFAULT_MODE (SMMPT32_DEFAULT_MODE)
+#define LEAF_TABLE_SIZE (2 << 9)       // BYTE
 
 #else // __riscv_xlen == 64
 
@@ -34,8 +38,11 @@
 #define MMPT_SDID_MASK   MMPT64_SDID_MASK
 #define MMPT_SDID_SHIFT   MMPT64_SDID_SHIFT
 #define MMPT_PPN_MASK    MMPT64_PPN_MASK
+#define SMMPT_DEFAULT_MODE (SMMPT64_DEFAULT_MODE)
 
 #endif // __riscv_xlen
+
+#define TABLE_SIZE (2 << 8)       // BYTE
 
 typedef enum {
     SMMPT_BARE,
@@ -54,5 +61,7 @@ void mmpt_set(mmpt_mode_t mode, unsigned int sdid, physical_addr_t ppn);
 void mmpt_get(mmpt_mode_t* mode, unsigned int* sdid, physical_addr_t* ppn);
 
 int sbi_smmpt_init(struct sbi_scratch *scratch, bool cold_boot);
+
+int sbi_hart_smmpt_configure(struct sbi_scratch *scratch);
 
 #endif   // __SBI_SMMTT_H__

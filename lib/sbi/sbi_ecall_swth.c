@@ -21,7 +21,6 @@ static int sbi_ecall_swth_handler(unsigned long extid, unsigned long funcid,
 				  struct sbi_ecall_return *out)
 {
 	int ret = 0;
-    u32 i;
 	unsigned long index;
 	struct sbi_domain *dom;
 	switch(funcid)
@@ -31,7 +30,7 @@ static int sbi_ecall_swth_handler(unsigned long extid, unsigned long funcid,
 			break;
 		case SBI_EXT_SWTH_ENTER:
 			index = regs->a0;
-			sbi_domain_for_each(i, dom) {
+			sbi_domain_for_each(dom) {
 				if (dom->index == index)
 					if (sbi_hartmask_test_hartindex(sbi_hartid_to_hartindex(current_hartid()), dom->possible_harts))
 						ret = sbi_domain_context_enter(dom);

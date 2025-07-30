@@ -195,6 +195,7 @@ struct sbi_domain {
 	bool fw_region_inited;
 	/* MMPT mode of this domain */
 	mmpt_mode_t mmpt_mode;
+	void *mpt;
 };
 
 /** The root domain instance */

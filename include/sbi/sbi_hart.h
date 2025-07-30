@@ -12,6 +12,7 @@
 
 #include <sbi/sbi_types.h>
 #include <sbi/sbi_bitops.h>
+#include <sbi/sbi_smmpt.h>
 
 /** Possible privileged specification versions of a hart */
 enum sbi_hart_priv_versions {
@@ -159,6 +160,7 @@ bool sbi_hart_has_extension(struct sbi_scratch *scratch,
 			    enum sbi_hart_extensions ext);
 void sbi_hart_get_extensions_str(struct sbi_scratch *scratch,
 				 char *extension_str, int nestr);
+int sbi_hart_isolation_configure(struct sbi_scratch *scratch);
 bool sbi_hart_has_csr(struct sbi_scratch *scratch, enum sbi_hart_csrs csr);
 
 void __attribute__((noreturn)) sbi_hart_hang(void);
