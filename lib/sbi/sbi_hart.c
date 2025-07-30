@@ -23,6 +23,7 @@
 #include <sbi/sbi_string.h>
 #include <sbi/sbi_trap.h>
 #include <sbi/sbi_hfence.h>
+#include <sbi/sbi_smmpt.h>
 
 extern void __sbi_expected_trap(void);
 extern void __sbi_expected_trap_hext(void);
