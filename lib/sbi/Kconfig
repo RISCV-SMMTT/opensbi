@@ -69,4 +69,8 @@ config SBI_ECALL_SSE
 config SBI_ECALL_MPXY
 	bool "MPXY extension"
 	default y
+
+config SBI_ECALL_SWTH
+	bool "OpenSBI Domain Switch extensions"
+	default y
 endmenu

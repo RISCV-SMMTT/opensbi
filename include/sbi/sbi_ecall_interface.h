@@ -38,6 +38,11 @@
 #define SBI_EXT_SSE				0x535345
 #define SBI_EXT_FWFT				0x46574654
 #define SBI_EXT_MPXY				0x4D505859
+#define SBI_EXT_SWTH				0x44444444			// domain switch
+
+/* SBI function IDs for DOMSW extension*/
+#define SBI_EXT_SWTH_EXIT				0x0
+#define SBI_EXT_SWTH_ENTER				0x1
 
 /* SBI function IDs for BASE extension*/
 #define SBI_EXT_BASE_GET_SPEC_VERSION		0x0
