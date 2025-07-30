@@ -3,6 +3,7 @@
 
 #include <sbi/sbi_const.h>
 #include <sbi/sbi_types.h>
+#include <sbi/sbi_scratch.h>
 
 /** MMPT */
 
@@ -51,5 +52,7 @@ typedef enum {
 void mmpt_set(mmpt_mode_t mode, unsigned int sdid, physical_addr_t ppn);
 
 void mmpt_get(mmpt_mode_t* mode, unsigned int* sdid, physical_addr_t* ppn);
+
+int sbi_smmpt_init(struct sbi_scratch *scratch, bool cold_boot);
 
 #endif   // __SBI_SMMTT_H__
