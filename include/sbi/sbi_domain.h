@@ -196,6 +196,8 @@ struct sbi_domain {
 	/* MMPT mode of this domain */
 	mmpt_mode_t mmpt_mode;
 	void *mpt;
+	/* count the memregions this domain has */
+	u32 memregs_count;
 };
 
 /** The root domain instance */
