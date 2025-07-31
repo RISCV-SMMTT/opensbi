@@ -29,7 +29,10 @@
 #define MMPT_SDID_SHIFT   MMPT32_SDID_SHIFT
 #define MMPT_PPN_MASK    MMPT32_PPN_MASK
 #define SMMPT_DEFAULT_MODE (SMMPT32_DEFAULT_MODE)
-#define LEAF_TABLE_SIZE (2 << 9)       // BYTE
+#define LEAF_TABLE_SIZE (2 << 13)       // BYTE
+#define RANGE_OFFSET 15
+#define PA_PN0 10
+#define PA_PN1 9
 
 #else // __riscv_xlen == 64
 
@@ -39,10 +42,22 @@
 #define MMPT_SDID_SHIFT   MMPT64_SDID_SHIFT
 #define MMPT_PPN_MASK    MMPT64_PPN_MASK
 #define SMMPT_DEFAULT_MODE (SMMPT64_DEFAULT_MODE)
+#define ROOT_TABLE_SIZE (2 << 15)       // BYTE
+#define RANGE_OFFSET 16
+#define PA_PN 9
+#define PA_PN4 12
 
 #endif // __riscv_xlen
 
-#define TABLE_SIZE (2 << 8)       // BYTE
+extern const uint64_t level_sizes[];
+
+#if __riscv_xlen == 32
+#define MUST_PERMS_COUNT 7
+#else
+#define MUST_PERMS_COUNT 15
+#endif
+
+#define TABLE_SIZE (2 << 12)       // BYTE
 
 typedef enum {
     SMMPT_BARE,
@@ -55,6 +70,38 @@ typedef enum {
 #endif
     SMMTT_MAX
 } mmpt_mode_t;
+
+/* MPTE decode */
+
+typedef enum
+{
+    PERMS_NOACCESS    = 0b000,
+    PERMS_RO    = 0b001,
+    PERMS_RW    = 0b011,
+    PERMS_EO    = 0b100,
+    PERMS_RX    = 0b101,
+    PERMS_RWX   = 0b111,
+} smmpt_perms;
+
+#if __riscv_xlen == 32
+typedef struct
+{
+    uint32_t valid: 1;
+    uint32_t leaf: 1;
+    uint32_t napot: 1;
+    uint32_t reserved: 5;
+    uint32_t info: 24;
+} mpt_entry_t;
+#else
+typedef struct
+{
+    uint64_t valid: 1;
+    uint64_t leaf: 1;
+    uint64_t napot: 1;
+    uint64_t reserved: 5;
+    uint64_t info: 56;
+} mpt_entry_t;
+#endif
 
 void mmpt_set(mmpt_mode_t mode, unsigned int sdid, physical_addr_t ppn);
 
