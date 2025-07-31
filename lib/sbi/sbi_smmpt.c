@@ -20,14 +20,19 @@
 
 #if __riscv_xlen == 32
 #define PA_PN_OFFSET_LIST 15, 25
-#define PA_PN_LEN       10, 9
+#define PA_PN_LEN       9, 10
+#define PA_PN_MASK_LIST   (1ULL << 9) - 1, (1ULL << 10) - 1
 #else
 #define PA_PN_OFFSET_LIST 16, 25, 34, 43, 52
 #define PA_PN_LEN       12, 9, 9, 9, 9
+#define PA_PN_MASK_LIST   (1ULL << 12) - 1, (1ULL << 9) - 1, \
+                          (1ULL << 9) - 1, (1ULL << 9) - 1, \
+                          (1ULL << 9) - 1
 #endif
 
 extern const uint8_t pa_pn_offset[];
 extern const uint8_t pa_pn_len[];
+extern const uint64_t pa_pn_mask[];
 
 #define PiB (1ULL << 50)
 #define TiB (1ULL << 40)
@@ -49,10 +54,10 @@ extern const uint8_t pa_pn_len[];
     128ULL * PiB /* L5 */
 #endif
 
-
 const uint8_t pa_pn_offset[] = { PA_PN_OFFSET_LIST };
 const uint8_t pa_pn_len[] = { PA_PN_LEN };
 const uint64_t level_sizes[] = { LEVEL_SIZE_LIST };
+const uint64_t pa_pn_mask[] = { PA_PN_MASK_LIST };
 
 #define LEVEL_COUNT (sizeof(level_sizes) / sizeof(level_sizes[0]))
 #define PA_PN_LEVELS (sizeof(pa_pn_offset) / sizeof(pa_pn_offset[0]))
@@ -185,6 +190,9 @@ static inline void mpt_set_ppn(mpt_entry_t *mpt_entry, uintptr_t ppn)
 #endif
 }
 
+#define GET_INDEX(base, level)  \
+    ((base >> pa_pn_offset[level - 1]) & pa_pn_mask[level - 1]);
+
 static int add_mpt_region(mpt_entry_t *mpt, unsigned long base,
 			  unsigned long order, unsigned long flags, int level)
 {
@@ -199,15 +207,14 @@ static int add_mpt_region(mpt_entry_t *mpt, unsigned long base,
 		return SBI_ENOMEM;
 
 	while (size != 0) {
-		idx	  = ((base >> pa_pn_offset[level - 1]) &
-			     pa_pn_len[level - 1]);
+		idx	  = GET_INDEX(base, level);
 		mpt_entry = &mpt[idx];
 
 		if (mpt_entry->valid)
 			return SBI_EINVAL;
 
 		if (FITS(base, size, level)) {
-			offset		    = base & (0x700) >> 12;
+			offset		    = (base & RANGE_MASK) >> 12;
 			mpt_entry->valid    = 1;
 			mpt_entry->leaf	    = 1;
 			mpt_entry->napot    = 0;

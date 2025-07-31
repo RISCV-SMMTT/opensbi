@@ -31,6 +31,7 @@
 #define SMMPT_DEFAULT_MODE (SMMPT32_DEFAULT_MODE)
 #define LEAF_TABLE_SIZE (2 << 13)       // BYTE
 #define RANGE_OFFSET 15
+#define RANGE_MASK 0x7fff
 #define PA_PN0 10
 #define PA_PN1 9
 
@@ -44,6 +45,7 @@
 #define SMMPT_DEFAULT_MODE (SMMPT64_DEFAULT_MODE)
 #define ROOT_TABLE_SIZE (2 << 15)       // BYTE
 #define RANGE_OFFSET 16
+#define RANGE_MASK 0xffff
 #define PA_PN 9
 #define PA_PN4 12
 
