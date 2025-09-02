@@ -49,11 +49,6 @@
 #define SBI_EXT_DYNM_MODIFY				0x1
 #define SBI_EXT_DYNM_RECLAIM			0x2
 
-// /* SBI function IDs for DYNM extension*/
-// #define SBI_EXT_DYNM_ALOC				0x0
-// #define SBI_EXT_DYNM_MODIFY				0x1
-// #define SBI_EXT_DYNM_RECLAIM			0x2
-
 /* SBI function IDs for BASE extension*/
 #define SBI_EXT_BASE_GET_SPEC_VERSION		0x0
 #define SBI_EXT_BASE_GET_IMP_ID			0x1

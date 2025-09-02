@@ -52,12 +52,6 @@ libsbi-objs-$(CONFIG_SBI_ECALL_FWFT) += sbi_ecall_fwft.o
 carray-sbi_ecall_exts-$(CONFIG_SBI_ECALL_SWTH) += ecall_swth
 libsbi-objs-$(CONFIG_SBI_ECALL_SWTH) += sbi_ecall_swth.o
 
-carray-sbi_ecall_exts-$(CONFIG_SBI_ECALL_DYNM) += ecall_dynm
-libsbi-objs-$(CONFIG_SBI_ECALL_DYNM) += sbi_ecall_dynm.o
-
-carray-sbi_ecall_exts-$(CONFIG_SBI_ECALL_SMMTT_TEST) += ecall_smmtt_test
-libsbi-objs-$(CONFIG_SBI_ECALL_SMMTT_TEST) += sbi_ecall_smmtt_test.o
-
 carray-sbi_ecall_exts-$(CONFIG_SBI_ECALL_LEGACY) += ecall_legacy
 libsbi-objs-$(CONFIG_SBI_ECALL_LEGACY) += sbi_ecall_legacy.o
 
@@ -74,7 +68,6 @@ libsbi-objs-y += sbi_bitmap.o
 libsbi-objs-y += sbi_bitops.o
 libsbi-objs-y += sbi_console.o
 libsbi-objs-y += sbi_domain_context.o
-libsbi-objs-y += sbi_dynmem.o
 libsbi-objs-y += sbi_domain.o
 libsbi-objs-y += sbi_emulate_csr.o
 libsbi-objs-y += sbi_fifo.o
@@ -93,7 +86,7 @@ libsbi-objs-y += sbi_platform.o
 libsbi-objs-y += sbi_pmu.o
 libsbi-objs-y += sbi_dbtr.o
 libsbi-objs-y += sbi_scratch.o
-libsbi-objs-y += sbi_smmtt.o
+libsbi-objs-y += sbi_smmpt.o
 libsbi-objs-y += sbi_sse.o
 libsbi-objs-y += sbi_string.o
 libsbi-objs-y += sbi_system.o

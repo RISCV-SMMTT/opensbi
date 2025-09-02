@@ -315,9 +315,9 @@ static void __noreturn init_coldboot(struct sbi_scratch *scratch, u32 hartid)
 		sbi_hart_hang();
 	}
 
-	rc = sbi_smmtt_init(scratch, true);
+	rc = sbi_smmpt_init(scratch, true);
 	if (rc) {
-		sbi_printf("%s: smmtt init failed (error %d)\n", __func__, rc);
+		sbi_printf("%s: smmpt init failed (error %d)\n", __func__, rc);
 		sbi_hart_hang();
 	}
 
@@ -366,8 +366,8 @@ static void __noreturn init_coldboot(struct sbi_scratch *scratch, u32 hartid)
 	run_all_tests();
 	
 	/*
-	 * Configure hart isolation, if there is smmtt initialization,
-	 * configure smmtt, otherwise configure PMP
+	 * Configure hart isolation, if there is smmpt initialization,
+	 * configure smmpt, otherwise configure PMP
 	 */
 	rc = sbi_hart_isolation_configure(scratch);
 	if (rc) {
@@ -378,6 +378,8 @@ static void __noreturn init_coldboot(struct sbi_scratch *scratch, u32 hartid)
 
 	count = sbi_scratch_offset_ptr(scratch, init_count_offset);
 	(*count)++;
+
+	sbi_smmpt_print_table(&root);
 
 	sbi_hsm_hart_start_finish(scratch, hartid);
 }
@@ -440,7 +442,7 @@ static void __noreturn init_warm_startup(struct sbi_scratch *scratch,
 	if (rc)
 		sbi_hart_hang();
 
-	rc = sbi_smmtt_init(scratch, false);
+	rc = sbi_smmpt_init(scratch, false);
 	if (rc) 
 		sbi_hart_hang();
 

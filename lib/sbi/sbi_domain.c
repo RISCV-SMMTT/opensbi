@@ -37,7 +37,7 @@ struct sbi_domain root = {
 	.system_reset_allowed = true,
 	.system_suspend_allowed = true,
 	.fw_region_inited = false,
-	.mtt = NULL,
+	.mpt = NULL,
 	.memregs_count = 0,
 };
 
@@ -173,8 +173,8 @@ void sbi_domain_dump(const struct sbi_domain *dom, const char *suffix)
 	sbi_printf("Domain%d Boot HART   %s: %d\n",
 		   dom->index, suffix, dom->boot_hartid);
 	
-	sbi_printf("Domain%d SMMTT MODE  %s: %d\n",
-		   dom->index, suffix, dom->smmtt_mode);
+	sbi_printf("Domain%d SMMPT MODE  %s: %d\n",
+		   dom->index, suffix, dom->mmpt_mode);
 
 	sbi_printf("Domain%d Region Count%s: %d\n",
 		   dom->index, suffix, dom->memregs_count);
@@ -514,6 +514,12 @@ int sbi_domain_init(struct sbi_scratch *scratch, u32 cold_hartid)
 			SBI_DOMAIN_MEMREGION_SU_WRITABLE |
 			SBI_DOMAIN_MEMREGION_SU_EXECUTABLE),
 			&root_memregs[root.memregs_count++]);
+
+	// sbi_domain_memregion_init(0, ~0UL,
+	// 		(SBI_DOMAIN_MEMREGION_SU_READABLE |
+	// 		SBI_DOMAIN_MEMREGION_SU_WRITABLE |
+	// 		SBI_DOMAIN_MEMREGION_SU_EXECUTABLE),
+	// 		&root_memregs[root.memregs_count++]);
 
 	/* Root domain memory region end */
 	root_memregs[root.memregs_count].size = 0;
