@@ -12,7 +12,7 @@
 
 #include <sbi/sbi_types.h>
 #include <sbi/sbi_bitops.h>
-#include <sbi/sbi_smmtt.h>
+#include <sbi/sbi_smmpt.h>
 
 /** Possible privileged specification versions of a hart */
 enum sbi_hart_priv_versions {
@@ -70,8 +70,8 @@ enum sbi_hart_extensions {
 	SBI_HART_EXT_SVADU,
 	/** Hart has Smsdid extension */
 	SBI_HART_EXT_SMSDID, 
-	/** Hart has Smmtt extension */
-	SBI_HART_EXT_SMMTT, 
+	/** Hart has smmpt extension */
+	SBI_HART_EXT_SMMPT, 
 
 	/** Maximum index of Hart extension */
 	SBI_HART_EXT_MAX,
@@ -109,7 +109,7 @@ struct sbi_hart_features {
 	unsigned int mhpm_mask;
 	unsigned int mhpm_bits;
 	unsigned int sdidlen;
-	unsigned long smmtt_supported_modes[BITS_TO_LONGS(SMMTT_MAX)];
+	unsigned long smmpt_supported_modes[BITS_TO_LONGS(SMMPT_MAX)];
 };
 
 struct sbi_scratch;
@@ -139,8 +139,6 @@ void sbi_hart_get_priv_version_str(struct sbi_scratch *scratch,
 void sbi_hart_update_extension(struct sbi_scratch *scratch,
 			       enum sbi_hart_extensions ext,
 			       bool enable);
-unsigned int sbi_hart_has_smmtt_mode(struct sbi_scratch *scratch,
-							smmtt_mode_t mode);
 bool sbi_hart_has_extension(struct sbi_scratch *scratch,
 			    enum sbi_hart_extensions ext);
 void sbi_hart_get_extensions_str(struct sbi_scratch *scratch,

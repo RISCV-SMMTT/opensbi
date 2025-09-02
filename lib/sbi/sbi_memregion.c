@@ -61,7 +61,7 @@ static bool is_region_valid_pmp(const struct sbi_domain_memregion *reg)
 	return true;
 }
 
-static bool is_region_valid_smmtt(const struct sbi_domain_memregion *reg)
+static bool is_region_valid_smmpt(const struct sbi_domain_memregion *reg)
 {
 	if (reg->base % PAGE_SIZE != 0)
 		return false;
@@ -84,8 +84,8 @@ static bool is_region_valid(const struct sbi_domain_memregion *reg,
 	case SBI_ISOLATION_SMEPMP:
 		return is_region_valid_pmp(reg);
 
-	case SBI_ISOLATION_SMMTT:
-		return is_region_valid_smmtt(reg);
+	case SBI_ISOLATION_SMMPT:
+		return is_region_valid_smmpt(reg);
 
 	default:
 		return false;
@@ -228,7 +228,7 @@ static void memregion_sanitize_pmp(struct sbi_domain_memregion *reg)
 	reg->size = (order == __riscv_xlen) ? -1UL : BIT(order);
 }
 
-static void memregion_sanitize_smmtt(struct sbi_domain_memregion *reg)
+static void memregion_sanitize_smmpt(struct sbi_domain_memregion *reg)
 {
 	reg->base = ROUNDDOWN(reg->base, PAGE_SIZE);
 	reg->size = ROUNDUP(reg->size, PAGE_SIZE);
@@ -251,8 +251,8 @@ static int memregion_sanitize(struct sbi_domain *dom,
 			memregion_sanitize_pmp(reg);
 			break;
 
-		case SBI_ISOLATION_SMMTT:
-			memregion_sanitize_smmtt(reg);
+		case SBI_ISOLATION_SMMPT:
+			memregion_sanitize_smmpt(reg);
 			break;
 
 		default:

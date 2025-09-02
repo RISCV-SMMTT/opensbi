@@ -11,7 +11,7 @@
 #include <libfdt.h>
 #include <libfdt_env.h>
 #include <sbi/sbi_domain.h>
-#include <sbi/sbi_smmtt.h>
+#include <sbi/sbi_smmpt.h>
 #include <sbi/sbi_error.h>
 #include <sbi/sbi_hartmask.h>
 #include <sbi/sbi_heap.h>
@@ -392,16 +392,16 @@ static int __fdt_parse_domain(void *fdt, int domain_offset, void *opaque)
 	if (val)
 	{
 		val32 = fdt32_to_cpu(val[0]);
-		if (val32 < SMMTT_MAX && val32 >= SMMTT_BARE)
+		if (val32 < SMMPT_MAX && val32 >= SMMPT_BARE)
 		{
-			root.smmtt_mode = val32;
-			dom->smmtt_mode = val32;
+			root.mmpt_mode = val32;
+			dom->mmpt_mode = val32;
 		}
 	}
 	else
 	{
-		root.smmtt_mode = SMMTT_BARE;
-		dom->smmtt_mode = SMMTT_BARE;
+		root.mmpt_mode = SMMPT_BARE;
+		dom->mmpt_mode = SMMPT_BARE;
 	}
 
 	/* Read "boot-hart" DT property */

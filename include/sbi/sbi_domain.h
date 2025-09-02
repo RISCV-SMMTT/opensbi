@@ -61,10 +61,10 @@ struct sbi_domain {
 	bool fw_region_inited;
 	/** Current isolation mode */
 	enum sbi_isolation_method isol_mode;
-	/** Current SMMTT mode */
-	int smmtt_mode;
-	/* MTT table of this domain */
-	void *mtt;
+	/** Current smmpt mode */
+	int mmpt_mode;
+	/* MPT table of this domain */
+	void *mpt;
 	/* count the memregions this domain has */
 	u32 memregs_count;
 };

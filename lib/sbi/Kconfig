@@ -38,14 +38,6 @@ config SBI_ECALL_SWTH
 	bool "OpenSBI Domain Switch extensions"
 	default y
 
-config SBI_ECALL_DYNM
-	bool "OpenSBI Domain Switch extensions"
-	default y
-
-config SBI_ECALL_SMMTT_TEST
-	bool "OpenSBI SMMTT TEST extension"
-	default y
-
 config SBI_ECALL_CPPC
 	bool "CPPC extension"
 	default y

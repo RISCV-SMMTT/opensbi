@@ -1,0 +1,571 @@
+/*
+ * SPDX-License-Identifier: BSD-2-Clause
+ *
+ * Copyright (c) 2019 Western Digital Corporation or its affiliates.
+ *
+ * Authors:
+ *   Xiao Xu <202337052@mail.sdu.edu.cn>
+ *
+ * Notes:
+ *   - Updated per SmMPT v0.42:
+ *     * Leaf subpages = 16 on RV64 (NUMPGINRANGE=4)
+ *     * Level/block size indexing is 1-based in logic, 0-based array access
+ *     * Smmpt64 root table = 32 KiB size and alignment, 4096 entries
+ *     * pn field widths ordered as {9,9,9,9,12} for RV64 (top level is 12-bit)
+ *     * When a leaf entry already exists, merge subpage perms instead of error
+ *     * Added optional MPT fence sequence hooks around mmpt_set()
+ */
+
+#include <sbi/sbi_smmpt.h>
+#include <sbi/riscv_encoding.h>
+#include <sbi/sbi_bitops.h>
+#include <sbi/riscv_asm.h>
+#include <sbi/sbi_hart.h>
+#include <sbi/sbi_error.h>
+#include <sbi/sbi_heap.h>
+#include <sbi/sbi_domain.h>
+#include <sbi_utils/fdt/fdt_helper.h>
+#include <libfdt.h>
+#include <sbi/sbi_console.h>
+
+#if __riscv_xlen == 32
+#define PA_PN_OFFSET_LIST 15, 25
+#define PA_PN_LEN         9, 10
+#define PA_PN_MASK_LIST   ((1ULL << 9) - 1), ((1ULL << 10) - 1)
+#else
+/* FIX: pn[0..3]=9-bit, pn[4]=12-bit (top/root) */
+#define PA_PN_OFFSET_LIST 16, 25, 34, 43, 52
+#define PA_PN_LEN         9,  9,  9,  9,  12
+#define PA_PN_MASK_LIST   ((1ULL << 9)  - 1), ((1ULL << 9)  - 1), \
+                          ((1ULL << 9)  - 1), ((1ULL << 9)  - 1), \
+                          ((1ULL << 12) - 1)
+#endif
+
+extern const uint8_t  pa_pn_offset[];
+extern const uint8_t  pa_pn_len[];
+extern const uint64_t pa_pn_mask[];
+
+#define PiB (1ULL << 50)
+#define TiB (1ULL << 40)
+#define GiB (1ULL << 30)
+#define MiB (1ULL << 20)
+#define KiB (1ULL << 10)
+
+#if __riscv_xlen == 32
+#define LEVEL_SIZE_LIST \
+	(4ULL * KiB), \
+	(4ULL * MiB)
+#else
+#define LEVEL_SIZE_LIST \
+	(4ULL * KiB),   /* L0: per 4KiB subpage tuple in leaf */ \
+	(2ULL * MiB),   /* L1 */ \
+	(1ULL * GiB),   /* L2 */ \
+	(512ULL * GiB), /* L3 */ \
+	(256ULL * TiB), /* L4 */ \
+	(128ULL * PiB)  /* L5 */
+#endif
+
+const uint8_t  pa_pn_offset[] = { PA_PN_OFFSET_LIST };
+const uint8_t  pa_pn_len[]    = { PA_PN_LEN };
+const uint64_t level_sizes[]  = { LEVEL_SIZE_LIST };
+const uint64_t pa_pn_mask[]   = { PA_PN_MASK_LIST };
+
+#define LEVEL_COUNT    (sizeof(level_sizes) / sizeof(level_sizes[0]))
+#define PA_PN_LEVELS   (sizeof(pa_pn_offset) / sizeof(pa_pn_offset[0]))
+
+#if __riscv_xlen == 32
+#define SMMTT_DEFAULT_MODE (SMMTT_34)
+#else
+#define SMMTT_DEFAULT_MODE (SMMTT_43)
+#endif
+
+#if __riscv_xlen == 32
+#define NUMPGINRANGE   3
+#else
+#define NUMPGINRANGE   4
+#endif
+#define OFFSET_ENTRIES (1U << NUMPGINRANGE)
+
+#ifndef PAGE_SHIFT
+#define PAGE_SHIFT 12
+#endif
+
+#ifndef TABLE_SIZE
+#define TABLE_SIZE      (4 * KiB)
+#endif
+
+#define SMMPT64_ROOT_ALIGN (32 * KiB)
+#define SMMPT64_ROOT_SIZE  (32 * KiB)
+
+/* Globals */
+static struct sbi_heap_control *smmpt_hpctrl = NULL;
+static uint64_t smmpt_base, smmpt_size, smmpt_order;
+
+/* ========= MMPT handling ========= */
+inline void mmpt_set(mmpt_mode_t mode, unsigned int sdid, physical_addr_t ppn)
+{
+	uintptr_t mmpt = INSERT_FIELD(0, MMPT_PPN_MASK, ppn);
+	mmpt	       = INSERT_FIELD(mmpt, MMPT_SDID_MASK, sdid);
+	mmpt	       = INSERT_FIELD(mmpt, MMPT_MODE_MASK, mode);
+	csr_write(CSR_MMPT, mmpt);
+}
+
+inline void mmpt_get(mmpt_mode_t *mode, unsigned int *sdid, physical_addr_t *ppn)
+{
+	uintptr_t mmpt = csr_read(CSR_MMPT);
+	if (mode)
+		*mode = (mmpt & MMPT_MODE_MASK) >> MMPT_MODE_SHIFT;
+	if (sdid)
+		*sdid = (mmpt & MMPT_SDID_MASK) >> MMPT_SDID_SHIFT;
+	if (ppn)
+		*ppn = (mmpt & MMPT_PPN_MASK);
+}
+
+static int get_mpt_level(mmpt_mode_t mode, int *level)
+{
+	int tmp = -1;
+
+	switch (mode) {
+	case SMMPT_BARE:
+		tmp = -1;
+		break;
+#if __riscv_xlen == 32
+	case SMMPT_34:
+		tmp = 2;
+		break;
+#else
+	case SMMPT_43:
+		tmp = 3;
+		break;
+#endif
+#if __riscv_xlen == 64
+	case SMMPT_52:
+		tmp = 4;
+		break;
+	case SMMPT_64:
+		tmp = 5;
+		break;
+#endif
+	default:
+		return SBI_EINVAL;
+	}
+
+	if (level)
+		*level = tmp;
+	return SBI_OK;
+}
+
+static inline uint64_t perms_from_flags(unsigned long flags)
+{
+	if (flags & SBI_DOMAIN_MEMREGION_SU_READABLE) {
+		if (flags & SBI_DOMAIN_MEMREGION_SU_WRITABLE)
+			return (flags & SBI_DOMAIN_MEMREGION_SU_EXECUTABLE) ? PERMS_RWX : PERMS_RW;
+		else
+			return (flags & SBI_DOMAIN_MEMREGION_SU_EXECUTABLE) ? PERMS_RX : PERMS_RO;
+	}
+	return PERMS_NOACCESS;
+}
+
+#define FITS(base, size, level) \
+    (((size) >= level_sizes[(level) - 1]) && \
+     ((base) % level_sizes[(level) - 1]) == 0)
+     
+/* ---- MPTE helpers (subpage perms live as 3-bit tuples) ---- */
+static inline uint8_t get_perms_for_page(mpt_entry_t entry, uint8_t page_index)
+{
+	if (page_index >= OFFSET_ENTRIES)
+		return 0;
+	return (entry.info >> (page_index * 3)) & 0x7;
+}
+
+static inline void set_perms_for_page(mpt_entry_t *entry, uint8_t page_index, smmpt_perms perms)
+{
+	entry->info = (entry->info & ~((uint64_t)0x7 << (page_index * 3))) |
+		      (((uint64_t)perms & 0x7) << (page_index * 3));
+}
+
+static inline uint64_t mpt_get_ppn(mpt_entry_t entry)
+{
+#if __riscv_xlen == 32
+	return (entry.info) & 0x3fffff;
+#else
+	return (entry.info) & 0xfffffffffffULL;
+#endif
+}
+
+static inline void mpt_set_ppn(mpt_entry_t *mpt_entry, uintptr_t ppn)
+{
+	mpt_entry->info = (uint64_t)ppn;
+}
+
+#define GET_INDEX(base, level) \
+	(((base) >> pa_pn_offset[(level) - 1]) & pa_pn_mask[(level) - 1])
+
+static int add_mpt_region(mpt_entry_t *mpt, unsigned long long *base,
+                           unsigned long long *size, unsigned long flags, int level)
+{
+    int rc;
+    mpt_entry_t *mpt_entry;
+    mpt_entry_t *new_mpt;
+    smmpt_perms perms;
+    int idx, offset;
+    uintptr_t ppn;
+    int i;
+
+    if (!mpt)
+        return SBI_ENOMEM;
+
+    while (*size != 0) {
+        idx = GET_INDEX(*base, level);
+        mpt_entry = &mpt[idx];
+
+        while (mpt_entry->valid == 1 && mpt_entry->leaf == 0)
+        {
+            level--;
+            ppn = mpt_get_ppn(*mpt_entry) << PAGE_SHIFT;
+            mpt = (mpt_entry_t *)ppn;
+            idx = GET_INDEX(*base, level);
+            mpt_entry = &mpt[idx];
+            if (!mpt_entry)
+                break;
+        }
+
+        if (FITS(*base, *size, level + 1))
+        {
+            for (i = 0; i < 2 << (G + 1); i++)
+            {
+                (mpt_entry + i)->valid = 1;
+                (mpt_entry + i)->leaf = 1;
+                (mpt_entry + i)->napot = 1;
+                (mpt_entry + i)->reserved = 0;
+                (mpt_entry + i)->info = G << 4;
+            }
+
+            *size -= level_sizes[level];
+            *base += level_sizes[level];
+        }
+        else if (FITS(*base, *size, level)) {
+            offset = *base >> (pa_pn_offset[level - 1] - RANGE_NUM) & RANGE_MASK;
+            mpt_entry->valid = 1;
+            mpt_entry->leaf = 1;
+            mpt_entry->napot = 0;
+            mpt_entry->reserved = 0;
+            perms = perms_from_flags(flags);
+            set_perms_for_page(mpt_entry, offset, perms);
+
+            *size -= level_sizes[level - 1];
+            *base += level_sizes[level - 1];
+        } else {
+            new_mpt = sbi_aligned_alloc_from(smmpt_hpctrl, PAGE_SIZE, TABLE_SIZE);
+            if (!new_mpt)
+                return SBI_ENOMEM;
+
+            mpt_set_ppn(mpt_entry, ((uintptr_t)new_mpt) >> PAGE_SHIFT);
+            rc = add_mpt_region(new_mpt, base, size, flags, level - 1);
+            if (rc)
+                return rc;
+
+            mpt_entry->valid = 1;
+            mpt_entry->leaf = 0;
+            mpt_entry->napot = 0;
+            mpt_entry->reserved = 0;
+        }
+    }
+
+    return SBI_OK;
+}
+
+static int initialize_mpt(struct sbi_domain *dom, struct sbi_scratch *scratch)
+{
+	struct sbi_domain_memregion *reg;
+	int level, rc;
+
+	if (dom->mmpt_mode == SMMPT_BARE)
+		dom->mmpt_mode = SMMPT_DEFAULT_MODE;
+
+	rc = get_mpt_level(dom->mmpt_mode, &level);
+	if (rc)
+		return rc;
+
+	/* Allocate memory for MPT root table */
+	if (!dom->mpt) {
+		if (level == 5) { /* Smmpt64 root: 32 KiB & 32 KiB alignment */
+			dom->mpt = sbi_aligned_alloc_from(smmpt_hpctrl, PAGE_SIZE << 1, PAGE_SIZE << 1);
+		} else {
+			dom->mpt = sbi_aligned_alloc_from(smmpt_hpctrl, PAGE_SIZE, PAGE_SIZE);
+		}
+		if (!dom->mpt)
+			return SBI_ENOMEM;
+
+		/* Initialize all covered SU-RWX memregions */
+		sbi_domain_for_each_memregion(dom, reg) {
+            unsigned long long base = reg->base;
+            unsigned long long size = reg->size;
+			if (!(reg->flags & SBI_DOMAIN_MEMREGION_SU_RWX))
+				continue;
+			rc = add_mpt_region((mpt_entry_t *)dom->mpt, &base, &size, reg->flags & SBI_DOMAIN_MEMREGION_SU_RWX, level);
+			if (rc)
+				return rc;
+		}
+	}
+
+	return SBI_OK;
+}
+
+int sbi_hart_smmpt_configure(struct sbi_scratch *scratch)
+{
+	int rc;
+	struct sbi_domain *dom = sbi_domain_thishart_ptr();
+	unsigned int pmp_count = sbi_hart_pmp_count(scratch);
+
+	/* Build/ensure MPT */
+	rc = initialize_mpt(dom, scratch);
+	if (rc)
+		return rc;
+
+	/* Program mmpt: mode, SDID (=dom->index), root PPN */
+	mmpt_set(dom->mmpt_mode, dom->index, ((uintptr_t)dom->mpt) >> PAGE_SHIFT);
+
+	/* Protect MPT region with PMP: last entry RWX off, then guard MPT heap */
+	pmp_set(pmp_count - 1, PMP_R | PMP_W | PMP_X, 0, __riscv_xlen);
+	pmp_set(0, 0, smmpt_base, smmpt_order);
+
+	return SBI_OK;
+}
+
+static int setup_mpt_table(void)
+{
+	int len;
+	const void *fdt;
+	int chosen_offset;
+	const int *order_prop;
+	const int *base_prop;
+
+	fdt = fdt_get_address();
+	chosen_offset = fdt_path_offset(fdt, "/chosen/opensbi-domains/smmpt_table");
+	if (chosen_offset < 0)
+		return SBI_ENOMEM;
+
+	order_prop = fdt_getprop(fdt, chosen_offset, "order", &len);
+	base_prop  = fdt_getprop(fdt, chosen_offset, "base", &len);
+
+	smmpt_order = fdt32_to_cpu(order_prop[0]);
+	smmpt_size  = 1ULL << smmpt_order;
+	smmpt_base  = (((uint64_t)fdt32_to_cpu(base_prop[0]) << 32) |
+			(uint64_t)fdt32_to_cpu(base_prop[1]));
+
+	if (smmpt_size == 0 || smmpt_base == 0)
+		return SBI_ERR_FAILED;
+
+	/* Initialize the SMMTT table heap */
+	sbi_heap_alloc_new(&smmpt_hpctrl);
+	sbi_heap_init_new(smmpt_hpctrl, smmpt_base, smmpt_size);
+
+	return SBI_OK;
+}
+
+#define SECURE_DEVICE(status, sstatus) \
+	(!strcmp(status, "disabled") && !strcmp(sstatus, "okay"))
+#define NONSECURE_DEVICE(status, sstatus) \
+	(!strcmp(status, "okay") && !strcmp(sstatus, "disabled"))
+#define DISABLED_DEVICE(status, sstatus) \
+	(!strcmp(status, "disabled") && !strcmp(sstatus, "disabled"))
+#define AVAILABLE_DEVICE(status, sstatus) \
+	(!strcmp(status, "okay") && !strcmp(sstatus, "okay"))
+
+static int device_get_flags(const void *fdt, int dev, unsigned long *flags)
+{
+	const char *status, *sstatus, *name;
+
+	status = fdt_getprop(fdt, dev, "status", NULL);
+	if (!status) status = "okay";
+
+	sstatus = fdt_getprop(fdt, dev, "secure-status", NULL);
+	if (!sstatus) sstatus = status;
+
+	*flags = SBI_DOMAIN_MEMREGION_MMIO;
+
+	if (SECURE_DEVICE(status, sstatus) || DISABLED_DEVICE(status, sstatus)) {
+		*flags |= (SBI_DOMAIN_MEMREGION_M_READABLE | SBI_DOMAIN_MEMREGION_M_WRITABLE);
+	} else if (NONSECURE_DEVICE(status, sstatus)) {
+		*flags |= (SBI_DOMAIN_MEMREGION_SU_READABLE | SBI_DOMAIN_MEMREGION_SU_WRITABLE);
+	} else if (AVAILABLE_DEVICE(status, sstatus)) {
+		*flags |= (SBI_DOMAIN_MEMREGION_M_READABLE | SBI_DOMAIN_MEMREGION_M_WRITABLE |
+			   SBI_DOMAIN_MEMREGION_SU_READABLE | SBI_DOMAIN_MEMREGION_SU_WRITABLE);
+	} else {
+		name = fdt_get_name(fdt, dev, NULL);
+		if (name)
+			sbi_printf("%s: invalid security specification for device %s\n", __func__, name);
+		else
+			sbi_printf("%s: invalid security specification\n", __func__);
+		return SBI_EINVAL;
+	}
+
+	return SBI_OK;
+}
+
+static int create_regions_for_devices(void)
+{
+	int soc, dev, ret, i;
+	uint64_t base, size;
+	unsigned long flags;
+	struct sbi_domain_memregion reg;
+
+	const void *fdt = fdt_get_address();
+	soc = fdt_path_offset(fdt, "/soc");
+	if (soc < 0)
+		return SBI_EINVAL;
+
+	fdt_for_each_subnode(dev, fdt, soc) {
+		if (fdt_get_property(fdt, dev, "reg", NULL)) {
+			ret = device_get_flags(fdt, dev, &flags);
+			if (ret < 0)
+				return ret;
+
+			i = 0;
+			while (1) {
+				ret = fdt_get_node_addr_size(fdt, dev, i++, &base, &size);
+				if (ret < 0)
+					break;
+
+				sbi_domain_memregion_init(base, size, flags, &reg);
+				ret = sbi_domain_add_memregion(&root, &reg);
+				if (ret < 0)
+					return ret;
+			}
+		}
+	}
+
+	return 0;
+}
+
+int sbi_smmpt_init(struct sbi_scratch *scratch, bool cold_boot)
+{
+	int rc = 0;
+	if (!sbi_hart_has_extension(scratch, SBI_HART_EXT_SMMPT))
+		return SBI_OK;
+
+	if (cold_boot) {
+		rc = setup_mpt_table();
+		if (rc < 0)
+			return rc;
+		rc = create_regions_for_devices();
+		if (rc < 0)
+			return rc;
+	}
+	return rc;
+}
+
+/* ===================== MPT Dump (print) ===================== */
+
+static inline const char *perms_to_str(uint8_t p)
+{
+	switch (p & 0x7) {
+	case PERMS_RWX:      return "RWX";
+	case PERMS_RW:       return "RW-";
+	case PERMS_RX:       return "R-X";
+	case PERMS_RO:       return "R--";
+	case PERMS_NOACCESS: return "---";
+	default:             return "???";
+	}
+}
+
+static void print_mpt_leaf_line(const mpt_entry_t *entry, uintptr_t base_addr, int level)
+{
+    // 打印地址、类型、信息
+    sbi_printf("|  0x%013lx  |  LEAF L%-2d  |  0x%016lx  |  [ ",
+               (unsigned long)base_addr, level, (unsigned long)entry->info);
+
+    // 打印每个页的权限信息
+    for (int j = 0; j < (int)OFFSET_ENTRIES; j++) {
+        uint8_t p = get_perms_for_page(*entry, (uint8_t)j);
+        sbi_printf("%s ", perms_to_str(p));
+    }
+
+    // 打印 L、V、N 和其他信息
+    sbi_printf("] | L: %d  | V: %d  | N: %d\n",
+               entry->leaf,     // 打印 L 字段（是否为叶子节点）
+               entry->valid,    // 打印 V 字段（是否有效）
+               entry->napot);   // 打印 N 字段（是否使用NAPOT）
+}
+
+static void print_mpt_level_table(mpt_entry_t *table, uintptr_t base_addr, int level)
+{
+	if (!table)
+		return;
+
+	size_t entries = (pa_pn_len[level - 1] == 12) ? 4096 : 512;
+	uint64_t blk   = level_sizes[level - 1];
+
+	sbi_printf("\n========== MPT Level-%d Table ==========\n", level);
+	sbi_printf("MPT L%-d Table Address: 0x%lx\n", level, (uintptr_t)table);
+	sbi_printf("|  Physical Addr  |    Type    |         Info         |    Details     |\n");
+	sbi_printf("----------------------------------------------------------------------------\n");
+
+	for (size_t i = 0; i < entries; i++) {
+		mpt_entry_t *entry = &table[i];
+		if (!entry->valid)
+			continue;
+
+		uintptr_t addr_i = base_addr + (uintptr_t)blk * (uintptr_t)i;
+
+		if (entry->leaf) {
+			print_mpt_leaf_line(entry, addr_i, level);
+		} else {
+			uintptr_t child_pa = (uintptr_t)mpt_get_ppn(*entry) << PAGE_SHIFT;
+			sbi_printf("|  0x%013lx  |  NODE L%-2d |  0x%016lx  |  child @ 0x%lx |\n",
+				   (unsigned long)addr_i, level,
+				   (unsigned long)entry->info, (unsigned long)child_pa);
+			if (level > 1)
+				print_mpt_level_table((mpt_entry_t *)child_pa, addr_i, level - 1);
+		}
+	}
+	sbi_printf("----------------------------------------------------------------------------\n");
+}
+
+void sbi_smmpt_print_table(struct sbi_domain *dom)
+{
+	if (!dom) {
+		sbi_printf("Error: Domain is NULL!\n");
+		return;
+	}
+	if (!dom->mpt) {
+		sbi_printf("Error: SMMPT/MPT Table is not initialized!\n");
+		return;
+	}
+
+	int level = -1;
+	int rc = get_mpt_level(dom->mmpt_mode, &level);
+	if (rc || level < 0) {
+		sbi_printf("Error: Unsupported SMMPT mode: %d\n", dom->mmpt_mode);
+		return;
+	}
+
+	switch (dom->mmpt_mode) {
+	case SMMPT_BARE:
+		sbi_printf("SMMPT Mode: BARE (No translation)\n");
+		return;
+#if __riscv_xlen == 32
+	case SMMPT_34:
+		sbi_printf("SMMPT Mode: 3:4 (Top Level = %d)\n", level);
+		break;
+#else
+	case SMMPT_43:
+		sbi_printf("SMMPT Mode: 4:3 (Top Level = %d)\n", level);
+		break;
+#endif
+#if __riscv_xlen == 64
+	case SMMPT_52:
+		sbi_printf("SMMPT Mode: 5:2 (Top Level = %d)\n", level);
+		break;
+	case SMMPT_64:
+		sbi_printf("SMMPT Mode: 6:4 (Top Level = %d)\n", level);
+		break;
+#endif
+	default:
+		sbi_printf("Error: Unsupported SMMPT mode: %d\n", dom->mmpt_mode);
+		return;
+	}
+
+    print_mpt_level_table((mpt_entry_t *)dom->mpt, 0, level);
+}

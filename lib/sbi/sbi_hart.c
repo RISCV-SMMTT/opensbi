@@ -23,7 +23,7 @@
 #include <sbi/sbi_string.h>
 #include <sbi/sbi_trap.h>
 #include <sbi/sbi_hfence.h>
-#include <sbi/sbi_smmtt.h>
+#include <sbi/sbi_smmpt.h>
 #include <sbi/sbi_timer.h>
 
 extern void __sbi_expected_trap(void);
@@ -283,19 +283,6 @@ unsigned int sbi_hart_mhpm_bits(struct sbi_scratch *scratch)
 			sbi_scratch_offset_ptr(scratch, hart_features_offset);
 
 	return hfeatures->mhpm_bits;
-}
-
-unsigned int sbi_hart_has_smmtt_mode(struct sbi_scratch *scratch,
-	smmtt_mode_t mode)
-{
-struct sbi_hart_features *hfeatures =
-sbi_scratch_offset_ptr(scratch, hart_features_offset);
-
-if (!sbi_hart_has_extension(scratch, SBI_HART_EXT_SMMTT)) {
-return 0;
-}
-
-return __test_bit(mode, hfeatures->smmtt_supported_modes);
 }
 
 /*
@@ -577,8 +564,8 @@ int sbi_hart_isolation_configure(struct sbi_scratch *scratch)
 	if (!pmp_count)
 		return 0;
 
-	if (sbi_hart_has_extension(scratch, SBI_HART_EXT_SMMTT)) 
-		rc = sbi_hart_smmtt_configure(scratch);
+	if (sbi_hart_has_extension(scratch, SBI_HART_EXT_SMMPT)) 
+		rc = sbi_hart_smmpt_configure(scratch);
 	else 
 	{
 		pmp_log2gran = sbi_hart_pmp_log2gran(scratch);
@@ -724,7 +711,7 @@ const struct sbi_hart_ext_data sbi_hart_ext[] = {
 	__SBI_HART_EXT_DATA(svade, SBI_HART_EXT_SVADE),
 	__SBI_HART_EXT_DATA(svadu, SBI_HART_EXT_SVADU),
 	__SBI_HART_EXT_DATA(smsdid, SBI_HART_EXT_SMSDID),
-	__SBI_HART_EXT_DATA(smmtt, SBI_HART_EXT_SMMTT),
+	__SBI_HART_EXT_DATA(smmpt, SBI_HART_EXT_SMMPT),
 };
 
 _Static_assert(SBI_HART_EXT_MAX == array_size(sbi_hart_ext),
@@ -820,7 +807,7 @@ static int hart_detect_features(struct sbi_scratch *scratch)
 		sbi_scratch_offset_ptr(scratch, hart_features_offset);
 	unsigned long val, oldval;
 	bool has_zicntr = false;
-	smmtt_mode_t mode, check;
+	mmpt_mode_t mode, check;
 	int rc;
 
 	/* If hart features already detected then do nothing */
@@ -973,32 +960,25 @@ __pmp_skip:
 			CSR_MCYCLECFG, SBI_HART_EXT_SMCNTRPMF);
 	/* Detect if hart support smsdid extensions*/
 	__check_ext_csr(SBI_HART_PRIV_VER_1_12,
-			CSR_MTTP, SBI_HART_EXT_SMSDID);
+			CSR_MMPT, SBI_HART_EXT_SMSDID);
 	/* Detect if hart support sdtrig (debug triggers) */
 	__check_ext_csr(SBI_HART_PRIV_VER_UNKNOWN,
 			CSR_TSELECT, SBI_HART_EXT_SDTRIG);
 
 	if(sbi_hart_has_extension(scratch, SBI_HART_EXT_SMSDID))
 	{
-		hfeatures->sdidlen = mttp_get_sdidlen();
-
-		for (mode = SMMTT_BARE + 1; mode < SMMTT_MAX; mode++)
+		for (mode = SMMPT_BARE + 1; mode < SMMPT_MAX; mode++)
 		{
-			mttp_set(mode, 0, 0);
-			mttp_get(&check, NULL, NULL);
+			mmpt_set(mode, 0, 0);
+			mmpt_get(&check, NULL, NULL);
 			
 			if (check == mode)
 			{
-				__set_bit(mode, hfeatures->smmtt_supported_modes);
-
-				// We support at least one mode besides the
-				// always-supported SMMTT_BARE
-				__sbi_hart_update_extension(
-					hfeatures, SBI_HART_EXT_SMMTT, true);
+				/* support al least one mode except SMMTT_BARE*/
+				__sbi_hart_update_extension(hfeatures, SBI_HART_EXT_SMMPT, true);
 			}
 		}
 	}
-
 #undef __check_ext_csr
 
 	/* Save trap based detection of Zicntr */

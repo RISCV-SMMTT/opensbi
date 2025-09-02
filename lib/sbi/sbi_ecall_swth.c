@@ -15,8 +15,7 @@
 #include <sbi/riscv_asm.h>
 #include <sbi/sbi_domain.h>
 #include <sbi/sbi_domain_context.h>
-#include <sbi/sbi_smmtt.h>
-#include <sbi/sbi_dynmem.h>
+#include <sbi/sbi_smmpt.h>
 
 static int sbi_ecall_swth_handler(unsigned long extid, unsigned long funcid,
 				  struct sbi_trap_regs *regs,
@@ -24,7 +23,6 @@ static int sbi_ecall_swth_handler(unsigned long extid, unsigned long funcid,
 {
 	int ret = 0;
 	unsigned long index;
-	struct sbi_context *ctx = sbi_domain_context_thishart_ptr();
 	struct sbi_domain *dom;
 	u32 i, hartindex = sbi_hartid_to_hartindex(current_hartid());
 	switch(funcid)
@@ -51,11 +49,6 @@ static int sbi_ecall_swth_handler(unsigned long extid, unsigned long funcid,
 						ret = sbi_domain_context_enter(dom);
 			}
 			if (!dom)	ret = SBI_ERR_FAILED;
-			break;
-		case SBI_EXT_MTT_DUMP:
-			/* dump all infomation of current domain */
-			dom = ctx->dom;
-			sbi_smmtt_print_table(dom);
 			break;
 		default:
 			return SBI_ENODEV;	
