@@ -90,6 +90,10 @@ typedef enum
     PERMS_RWX   = 0b111,
 } smmpt_perms;
 
+/*
+ * When a MPT entry is a non-leaf entry, the reserved field is 2 bits longer than that of a leaf entry. 
+ * Therefore, decoding the info field of a non-leaf entry requires a corresponding bit offset.
+ */
 #if __riscv_xlen == 32
 typedef struct
 {

@@ -184,18 +184,22 @@ static inline void set_perms_for_page(mpt_entry_t *entry, uint8_t page_index, sm
 		      (((uint64_t)perms & 0x7) << (page_index * 3));
 }
 
+/*
+ * When a MPT entry is a non-leaf entry, the reserved field is 2 bits longer than that of a leaf entry. 
+ * Therefore, decoding the info field (ppn) of a non-leaf entry requires a corresponding bit offset.
+ */
 static inline uint64_t mpt_get_ppn(mpt_entry_t entry)
 {
 #if __riscv_xlen == 32
-	return (entry.info) & 0x3fffff;
+	return (entry.info >> 2) & 0x3fffff;
 #else
-	return (entry.info) & 0xfffffffffffULL;
+	return (entry.info >> 2) & 0xfffffffffffULL;
 #endif
 }
 
 static inline void mpt_set_ppn(mpt_entry_t *mpt_entry, uintptr_t ppn)
 {
-	mpt_entry->info = (uint64_t)ppn;
+	mpt_entry->info = (uint64_t)(ppn << 2);
 }
 
 #define GET_INDEX(base, level) \
@@ -232,6 +236,7 @@ static int add_mpt_region(mpt_entry_t *mpt, unsigned long long *base,
 
         if (FITS(*base, *size, level + 1))
         {
+			perms = perms_from_flags(flags);
             for (i = 0; i < 2 << (G + 1); i++)
             {
                 (mpt_entry + i)->valid = 1;
@@ -239,6 +244,7 @@ static int add_mpt_region(mpt_entry_t *mpt, unsigned long long *base,
                 (mpt_entry + i)->napot = 1;
                 (mpt_entry + i)->reserved = 0;
                 (mpt_entry + i)->info = G << 4;
+				(mpt_entry + i)->info |= ((uint64_t)perms);
             }
 
             *size -= level_sizes[level];
@@ -515,7 +521,7 @@ static void print_mpt_level_table(mpt_entry_t *table, uintptr_t base_addr, int l
 			uintptr_t child_pa = (uintptr_t)mpt_get_ppn(*entry) << PAGE_SHIFT;
 			sbi_printf("|  0x%013lx  |  NODE L%-2d |  0x%016lx  |  child @ 0x%lx |\n",
 				   (unsigned long)addr_i, level,
-				   (unsigned long)entry->info, (unsigned long)child_pa);
+				   (unsigned long)entry->info >> 2, (unsigned long)child_pa);
 			if (level > 1)
 				print_mpt_level_table((mpt_entry_t *)child_pa, addr_i, level - 1);
 		}
@@ -567,5 +573,5 @@ void sbi_smmpt_print_table(struct sbi_domain *dom)
 		return;
 	}
 
-    print_mpt_level_table((mpt_entry_t *)dom->mpt, 0, level);
+    print_mpt_level_table((mpt_entry_t *)dom->mpt, 0x80000000, level);
 }
