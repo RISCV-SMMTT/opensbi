@@ -386,9 +386,9 @@ static int __fdt_parse_domain(void *fdt, int domain_offset, void *opaque)
 	}
 	dom->fw_region_inited = root.fw_region_inited;
 
-	/* Read "smmtt-mode" DT property */
+	/* Read "smmpt-mode" DT property */
 	val32 = 0x1;
-	val = fdt_getprop(fdt, domain_offset, "smmtt-mode", &len);
+	val = fdt_getprop(fdt, domain_offset, "smmpt-mode", &len);
 	if (val)
 	{
 		val32 = fdt32_to_cpu(val[0]);

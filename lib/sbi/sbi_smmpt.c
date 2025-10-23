@@ -28,74 +28,10 @@
 #include <libfdt.h>
 #include <sbi/sbi_console.h>
 
-#if __riscv_xlen == 32
-#define PA_PN_OFFSET_LIST 15, 25
-#define PA_PN_LEN         9, 10
-#define PA_PN_MASK_LIST   ((1ULL << 9) - 1), ((1ULL << 10) - 1)
-#else
-/* FIX: pn[0..3]=9-bit, pn[4]=12-bit (top/root) */
-#define PA_PN_OFFSET_LIST 16, 25, 34, 43, 52
-#define PA_PN_LEN         9,  9,  9,  9,  12
-#define PA_PN_MASK_LIST   ((1ULL << 9)  - 1), ((1ULL << 9)  - 1), \
-                          ((1ULL << 9)  - 1), ((1ULL << 9)  - 1), \
-                          ((1ULL << 12) - 1)
-#endif
-
-extern const uint8_t  pa_pn_offset[];
-extern const uint8_t  pa_pn_len[];
-extern const uint64_t pa_pn_mask[];
-
-#define PiB (1ULL << 50)
-#define TiB (1ULL << 40)
-#define GiB (1ULL << 30)
-#define MiB (1ULL << 20)
-#define KiB (1ULL << 10)
-
-#if __riscv_xlen == 32
-#define LEVEL_SIZE_LIST \
-	(4ULL * KiB), \
-	(4ULL * MiB)
-#else
-#define LEVEL_SIZE_LIST \
-	(4ULL * KiB),   /* L0: per 4KiB subpage tuple in leaf */ \
-	(2ULL * MiB),   /* L1 */ \
-	(1ULL * GiB),   /* L2 */ \
-	(512ULL * GiB), /* L3 */ \
-	(256ULL * TiB), /* L4 */ \
-	(128ULL * PiB)  /* L5 */
-#endif
-
 const uint8_t  pa_pn_offset[] = { PA_PN_OFFSET_LIST };
 const uint8_t  pa_pn_len[]    = { PA_PN_LEN };
 const uint64_t level_sizes[]  = { LEVEL_SIZE_LIST };
 const uint64_t pa_pn_mask[]   = { PA_PN_MASK_LIST };
-
-#define LEVEL_COUNT    (sizeof(level_sizes) / sizeof(level_sizes[0]))
-#define PA_PN_LEVELS   (sizeof(pa_pn_offset) / sizeof(pa_pn_offset[0]))
-
-#if __riscv_xlen == 32
-#define SMMTT_DEFAULT_MODE (SMMTT_34)
-#else
-#define SMMTT_DEFAULT_MODE (SMMTT_43)
-#endif
-
-#if __riscv_xlen == 32
-#define NUMPGINRANGE   3
-#else
-#define NUMPGINRANGE   4
-#endif
-#define OFFSET_ENTRIES (1U << NUMPGINRANGE)
-
-#ifndef PAGE_SHIFT
-#define PAGE_SHIFT 12
-#endif
-
-#ifndef TABLE_SIZE
-#define TABLE_SIZE      (4 * KiB)
-#endif
-
-#define SMMPT64_ROOT_ALIGN (32 * KiB)
-#define SMMPT64_ROOT_SIZE  (32 * KiB)
 
 /* Globals */
 static struct sbi_heap_control *smmpt_hpctrl = NULL;
@@ -121,7 +57,7 @@ inline void mmpt_get(mmpt_mode_t *mode, unsigned int *sdid, physical_addr_t *ppn
 		*ppn = (mmpt & MMPT_PPN_MASK);
 }
 
-static int get_mpt_level(mmpt_mode_t mode, int *level)
+int get_mpt_level(mmpt_mode_t mode, int *level)
 {
 	int tmp = -1;
 
@@ -165,10 +101,6 @@ static inline uint64_t perms_from_flags(unsigned long flags)
 	}
 	return PERMS_NOACCESS;
 }
-
-#define FITS(base, size, level) \
-    (((size) >= level_sizes[(level) - 1]) && \
-     ((base) % level_sizes[(level) - 1]) == 0)
      
 /* ---- MPTE helpers (subpage perms live as 3-bit tuples) ---- */
 static inline uint8_t get_perms_for_page(mpt_entry_t entry, uint8_t page_index)
@@ -201,9 +133,6 @@ static inline void mpt_set_ppn(mpt_entry_t *mpt_entry, uintptr_t ppn)
 {
 	mpt_entry->info = (uint64_t)(ppn << 2);
 }
-
-#define GET_INDEX(base, level) \
-	(((base) >> pa_pn_offset[(level) - 1]) & pa_pn_mask[(level) - 1])
 
 static int add_mpt_region(mpt_entry_t *mpt, unsigned long long *base,
                            unsigned long long *size, unsigned long flags, int level)
@@ -363,7 +292,7 @@ static int setup_mpt_table(void)
 	if (smmpt_size == 0 || smmpt_base == 0)
 		return SBI_ERR_FAILED;
 
-	/* Initialize the SMMTT table heap */
+	/* Initialize the SMMPT table heap */
 	sbi_heap_alloc_new(&smmpt_hpctrl);
 	sbi_heap_init_new(smmpt_hpctrl, smmpt_base, smmpt_size);
 

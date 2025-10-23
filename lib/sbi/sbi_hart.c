@@ -974,7 +974,7 @@ __pmp_skip:
 			
 			if (check == mode)
 			{
-				/* support al least one mode except SMMTT_BARE*/
+				/* support al least one mode except SMMPT_BARE*/
 				__sbi_hart_update_extension(hfeatures, SBI_HART_EXT_SMMPT, true);
 			}
 		}
