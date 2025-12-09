@@ -60,6 +60,7 @@ extern const uint64_t level_sizes[];
 extern const uint8_t  pa_pn_offset[];
 extern const uint8_t  pa_pn_len[];
 extern const uint64_t pa_pn_mask[];
+extern const bool     enable_napot_leaf[];
 
 #if __riscv_xlen == 32
 #define MUST_PERMS_COUNT 7
@@ -140,6 +141,9 @@ typedef struct
 #define LEVEL_SIZE_LIST \
 	(4ULL * KiB), \
 	(4ULL * MiB)
+#define ENABLE_NAPOT_LEAF_LIST \
+    (0),  /* L0: 4K page */ \
+    (1)    /* L1: 4M page */
 #else
 #define LEVEL_SIZE_LIST \
 	(4ULL * KiB),   /* L0: per 4KiB subpage tuple in leaf */ \
@@ -148,6 +152,13 @@ typedef struct
 	(512ULL * GiB), /* L3 */ \
 	(256ULL * TiB), /* L4 */ \
 	(128ULL * PiB)  /* L5 */
+#define ENABLE_NAPOT_LEAF_LIST \
+    (0),   /* L0: 4K page */ \
+    (1),   /* L1: 2M page */ \
+    (1),   /* L2: 1G page */ \
+    (0),   /* L3: 512G page */ \
+    (0),   /* L4: 256T page */ \
+    (0)    /* L5: 128P page */
 #endif
 
 #define LEVEL_COUNT    (sizeof(level_sizes) / sizeof(level_sizes[0]))
@@ -178,11 +189,17 @@ typedef struct
 #define GET_INDEX(base, level) \
 	(((base) >> pa_pn_offset[(level) - 1]) & pa_pn_mask[(level) - 1])
 
+#define ENABLE_NAPOT_LEAF(level) \
+    (enable_napot_leaf[(level) - 1])
+
 void mmpt_set(mmpt_mode_t mode, unsigned int sdid, physical_addr_t ppn);
 
 void mmpt_get(mmpt_mode_t* mode, unsigned int* sdid, physical_addr_t* ppn);
 
 int get_mpt_level(mmpt_mode_t mode, int *level);
+
+int add_mpt_region(mpt_entry_t *mpt, unsigned long long *base,
+		   unsigned long long *size, unsigned long flags, int level);
 
 int sbi_smmpt_init(struct sbi_scratch *scratch, bool cold_boot);
 

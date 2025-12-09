@@ -18,6 +18,7 @@
 #include <sbi/sbi_trap.h>
 #include <sbi/sbi_unpriv.h>
 #include <sbi/sbi_console.h>
+#include <sbi/sbi_hart.h>
 
 typedef int (*illegal_insn_func)(ulong insn, struct sbi_trap_regs *regs);
 
@@ -141,6 +142,7 @@ int sbi_illegal_insn_handler(struct sbi_trap_context *tcntx)
 	struct sbi_trap_regs *regs = &tcntx->regs;
 	ulong insn = tcntx->trap.tval;
 	struct sbi_trap_info uptrap;
+	struct sbi_scratch *scratch = sbi_scratch_thishart_ptr();
 
 	/*
 	 * We only deal with 32-bit (or longer) illegal instructions. If we
@@ -156,6 +158,22 @@ int sbi_illegal_insn_handler(struct sbi_trap_context *tcntx)
 	sbi_pmu_ctr_incr_fw(SBI_PMU_FW_ILLEGAL_INSN);
 	if (unlikely((insn & 3) != 3)) {
 		insn = sbi_get_insn(regs->mepc, &uptrap);
+
+		/*
+		 * Since the SMMPT extension allows a memory region to have 
+		 * execute-only access permissions in SU mode, in this case, 
+		 * when opensbi attempts to read memory to simulate instruction 
+		 * fetching, it will be rejected by SMMPT. 
+		 * 
+		 * The resulting exception will be incorrectly classified as a 
+		 * fetch access exception, and we need to change it back to an 
+		 * illegal instruction exception.
+		 */
+		if (sbi_hart_has_extension(scratch, SBI_HART_EXT_SMMPT) &&
+			(uptrap.cause == CAUSE_FETCH_ACCESS)) {
+			return truly_illegal_insn(insn, regs);
+		}
+		
 		if (uptrap.cause)
 			return sbi_trap_redirect(regs, &uptrap);
 		if ((insn & 3) != 3)

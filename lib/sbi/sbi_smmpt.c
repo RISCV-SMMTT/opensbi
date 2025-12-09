@@ -32,6 +32,7 @@ const uint8_t  pa_pn_offset[] = { PA_PN_OFFSET_LIST };
 const uint8_t  pa_pn_len[]    = { PA_PN_LEN };
 const uint64_t level_sizes[]  = { LEVEL_SIZE_LIST };
 const uint64_t pa_pn_mask[]   = { PA_PN_MASK_LIST };
+const bool     enable_napot_leaf[] = { ENABLE_NAPOT_LEAF_LIST };
 
 /* Globals */
 static struct sbi_heap_control *smmpt_hpctrl = NULL;
@@ -99,6 +100,9 @@ static inline uint64_t perms_from_flags(unsigned long flags)
 		else
 			return (flags & SBI_DOMAIN_MEMREGION_SU_EXECUTABLE) ? PERMS_RX : PERMS_RO;
 	}
+	else if ((flags & SBI_DOMAIN_MEMREGION_SU_ACCESS_MASK) == SBI_DOMAIN_MEMREGION_SU_EXECUTABLE) {
+		return PERMS_EO;
+	}
 	return PERMS_NOACCESS;
 }
      
@@ -134,7 +138,7 @@ static inline void mpt_set_ppn(mpt_entry_t *mpt_entry, uintptr_t ppn)
 	mpt_entry->info = (uint64_t)(ppn << 2);
 }
 
-static int add_mpt_region(mpt_entry_t *mpt, unsigned long long *base,
+int add_mpt_region(mpt_entry_t *mpt, unsigned long long *base,
                            unsigned long long *size, unsigned long flags, int level)
 {
     int rc;
@@ -163,7 +167,7 @@ static int add_mpt_region(mpt_entry_t *mpt, unsigned long long *base,
                 break;
         }
 
-        if (FITS(*base, *size, level + 1))
+        if (FITS(*base, *size, level + 1) && ENABLE_NAPOT_LEAF(level + 1))
         {
 			perms = perms_from_flags(flags);
             for (i = 0; i < 2 << (G + 1); i++)
@@ -179,7 +183,7 @@ static int add_mpt_region(mpt_entry_t *mpt, unsigned long long *base,
             *size -= level_sizes[level];
             *base += level_sizes[level];
         }
-        else if (FITS(*base, *size, level)) {
+        else if (FITS(*base, *size, level) && !ENABLE_NAPOT_LEAF(level)) {
             offset = *base >> (pa_pn_offset[level - 1] - RANGE_NUM) & RANGE_MASK;
             mpt_entry->valid = 1;
             mpt_entry->leaf = 1;
