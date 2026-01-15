@@ -30,9 +30,9 @@
 
 const uint8_t  pa_pn_offset[] = { PA_PN_OFFSET_LIST };
 const uint8_t  pa_pn_len[]    = { PA_PN_LEN };
-const uint64_t level_sizes[]  = { LEVEL_SIZE_LIST };
-const uint64_t pa_pn_mask[]   = { PA_PN_MASK_LIST };
 const bool     enable_napot_leaf[] = { ENABLE_NAPOT_LEAF_LIST };
+const unsigned long level_sizes[]  = { LEVEL_SIZE_LIST };
+const unsigned long pa_pn_mask[]   = { PA_PN_MASK_LIST };
 
 /* Globals */
 static struct sbi_heap_control *smmpt_hpctrl = NULL;
@@ -92,7 +92,7 @@ int get_mpt_level(mmpt_mode_t mode, int *level)
 	return SBI_OK;
 }
 
-static inline uint64_t perms_from_flags(unsigned long flags)
+static inline unsigned long perms_from_flags(unsigned long flags)
 {
 	if (flags & SBI_DOMAIN_MEMREGION_SU_READABLE) {
 		if (flags & SBI_DOMAIN_MEMREGION_SU_WRITABLE)
@@ -116,15 +116,15 @@ static inline uint8_t get_perms_for_page(mpt_entry_t entry, uint8_t page_index)
 
 static inline void set_perms_for_page(mpt_entry_t *entry, uint8_t page_index, smmpt_perms perms)
 {
-	entry->info = (entry->info & ~((uint64_t)0x7 << (page_index * 3))) |
-		      (((uint64_t)perms & 0x7) << (page_index * 3));
+	entry->info = (entry->info & ~((unsigned long)0x7 << (page_index * 3))) |
+		      (((unsigned long)perms & 0x7) << (page_index * 3));
 }
 
 /*
  * When a MPT entry is a non-leaf entry, the reserved field is 2 bits longer than that of a leaf entry. 
  * Therefore, decoding the info field (ppn) of a non-leaf entry requires a corresponding bit offset.
  */
-static inline uint64_t mpt_get_ppn(mpt_entry_t entry)
+static inline unsigned long mpt_get_ppn(mpt_entry_t entry)
 {
 #if __riscv_xlen == 32
 	return (entry.info >> 2) & 0x3fffff;
@@ -135,19 +135,20 @@ static inline uint64_t mpt_get_ppn(mpt_entry_t entry)
 
 static inline void mpt_set_ppn(mpt_entry_t *mpt_entry, uintptr_t ppn)
 {
-	mpt_entry->info = (uint64_t)(ppn << 2);
+	mpt_entry->info = (unsigned long)(ppn << 2);
 }
 
-int add_mpt_region(mpt_entry_t *mpt, unsigned long long *base,
-                           unsigned long long *size, unsigned long flags, int level)
+int add_mpt_region(mpt_entry_t *mpt, unsigned long *base,
+                           unsigned long *size, unsigned long flags, int level)
 {
     int rc;
     mpt_entry_t *mpt_entry;
-    mpt_entry_t *new_mpt;
+    mpt_entry_t *new_mpt, *next_level_mpt;
     smmpt_perms perms;
     int idx, offset;
     uintptr_t ppn;
     int i;
+	unsigned long next_level_size = 0;
 
     if (!mpt)
         return SBI_ENOMEM;
@@ -158,26 +159,31 @@ int add_mpt_region(mpt_entry_t *mpt, unsigned long long *base,
 
         while (mpt_entry->valid == 1 && mpt_entry->leaf == 0)
         {
-            level--;
             ppn = mpt_get_ppn(*mpt_entry) << PAGE_SHIFT;
-            mpt = (mpt_entry_t *)ppn;
+            next_level_mpt = (mpt_entry_t *)ppn;
+			next_level_size = level_sizes[level - 1] * OFFSET_ENTRIES;
+            if (next_level_size > *size)
+                next_level_size = *size;
+
+			*size -= next_level_size;
+			add_mpt_region(next_level_mpt, base, &next_level_size, flags, level - 1);
             idx = GET_INDEX(*base, level);
             mpt_entry = &mpt[idx];
-            if (!mpt_entry)
+            if (!mpt_entry || *size == 0)
                 break;
         }
 
         if (FITS(*base, *size, level + 1) && ENABLE_NAPOT_LEAF(level + 1))
         {
 			perms = perms_from_flags(flags);
-            for (i = 0; i < 2 << (G + 1); i++)
+            for (i = 0; i < 1 << (G + 1); i++)
             {
                 (mpt_entry + i)->valid = 1;
                 (mpt_entry + i)->leaf = 1;
                 (mpt_entry + i)->napot = 1;
                 (mpt_entry + i)->reserved = 0;
                 (mpt_entry + i)->info = G << 4;
-				(mpt_entry + i)->info |= ((uint64_t)perms);
+				(mpt_entry + i)->info |= ((unsigned long)perms);
             }
 
             *size -= level_sizes[level];
@@ -194,13 +200,19 @@ int add_mpt_region(mpt_entry_t *mpt, unsigned long long *base,
 
             *size -= level_sizes[level - 1];
             *base += level_sizes[level - 1];
-        } else {
+        }
+		else if (*size != 0){
             new_mpt = sbi_aligned_alloc_from(smmpt_hpctrl, PAGE_SIZE, TABLE_SIZE);
             if (!new_mpt)
                 return SBI_ENOMEM;
+				
+			next_level_size = level_sizes[level - 1] * OFFSET_ENTRIES;
+            if (next_level_size > *size)
+                next_level_size = *size;
 
+			*size -= next_level_size;
             mpt_set_ppn(mpt_entry, ((uintptr_t)new_mpt) >> PAGE_SHIFT);
-            rc = add_mpt_region(new_mpt, base, size, flags, level - 1);
+            rc = add_mpt_region(new_mpt, base, &next_level_size, flags, level - 1);
             if (rc)
                 return rc;
 
@@ -238,8 +250,8 @@ static int initialize_mpt(struct sbi_domain *dom, struct sbi_scratch *scratch)
 
 		/* Initialize all covered SU-RWX memregions */
 		sbi_domain_for_each_memregion(dom, reg) {
-            unsigned long long base = reg->base;
-            unsigned long long size = reg->size;
+            unsigned long base = reg->base;
+            unsigned long size = reg->size;
 			if (!(reg->flags & SBI_DOMAIN_MEMREGION_SU_RWX))
 				continue;
 			rc = add_mpt_region((mpt_entry_t *)dom->mpt, &base, &size, reg->flags & SBI_DOMAIN_MEMREGION_SU_RWX, level);
@@ -434,7 +446,7 @@ static void print_mpt_level_table(mpt_entry_t *table, uintptr_t base_addr, int l
 		return;
 
 	size_t entries = (pa_pn_len[level - 1] == 12) ? 4096 : 512;
-	uint64_t blk   = level_sizes[level - 1];
+	unsigned long blk   = level_sizes[level - 1];
 
 	sbi_printf("\n========== MPT Level-%d Table ==========\n", level);
 	sbi_printf("MPT L%-d Table Address: 0x%lx\n", level, (uintptr_t)table);

@@ -25,7 +25,7 @@
 #if __riscv_xlen == 32
 
 #define MMPT_MODE_MASK   MMPT32_MODE_MASK
-#define MMPT_MODE_SHIFT    MMPT32_MODE_MASK_SHIFT
+#define MMPT_MODE_SHIFT    MMPT32_MODE_SHIFT
 #define MMPT_SDID_MASK   MMPT32_SDID_MASK
 #define MMPT_SDID_SHIFT   MMPT32_SDID_SHIFT
 #define MMPT_PPN_MASK    MMPT32_PPN_MASK
@@ -56,10 +56,10 @@
 
 #endif // __riscv_xlen
 
-extern const uint64_t level_sizes[];
+extern const unsigned long level_sizes[];
 extern const uint8_t  pa_pn_offset[];
 extern const uint8_t  pa_pn_len[];
-extern const uint64_t pa_pn_mask[];
+extern const unsigned long pa_pn_mask[];
 extern const bool     enable_napot_leaf[];
 
 #if __riscv_xlen == 32
@@ -101,27 +101,27 @@ typedef enum
 #if __riscv_xlen == 32
 typedef struct
 {
-    uint32_t valid: 1;
-    uint32_t leaf: 1;
-    uint32_t napot: 1;
-    uint32_t reserved: 5;
-    uint32_t info: 24;
+    unsigned long valid: 1;
+    unsigned long leaf: 1;
+    unsigned long napot: 1;
+    unsigned long reserved: 5;
+    unsigned long info: 24;
 } mpt_entry_t;
 #else
 typedef struct
 {
-    uint64_t valid: 1;
-    uint64_t leaf: 1;
-    uint64_t napot: 1;
-    uint64_t reserved: 5;
-    uint64_t info: 56;
+    unsigned long valid: 1;
+    unsigned long leaf: 1;
+    unsigned long napot: 1;
+    unsigned long reserved: 5;
+    unsigned long info: 56;
 } mpt_entry_t;
 #endif
 
 #if __riscv_xlen == 32
 #define PA_PN_OFFSET_LIST 15, 25
-#define PA_PN_LEN         9, 10
-#define PA_PN_MASK_LIST   ((1ULL << 9) - 1), ((1ULL << 10) - 1)
+#define PA_PN_LEN         10, 9
+#define PA_PN_MASK_LIST   ((1ULL << 10) - 1), ((1ULL << 9) - 1)
 #else
 /* FIX: pn[0..3]=9-bit, pn[4]=12-bit (top/root) */
 #define PA_PN_OFFSET_LIST 16, 25, 34, 43, 52
@@ -198,8 +198,8 @@ void mmpt_get(mmpt_mode_t* mode, unsigned int* sdid, physical_addr_t* ppn);
 
 int get_mpt_level(mmpt_mode_t mode, int *level);
 
-int add_mpt_region(mpt_entry_t *mpt, unsigned long long *base,
-		   unsigned long long *size, unsigned long flags, int level);
+int add_mpt_region(mpt_entry_t *mpt, unsigned long *base,
+		   unsigned long *size, unsigned long flags, int level);
 
 int sbi_smmpt_init(struct sbi_scratch *scratch, bool cold_boot);
 

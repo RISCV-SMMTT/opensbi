@@ -156,8 +156,13 @@ void sbi_mtimer_event_start(u64 next_event)
 {
 	sbi_pmu_ctr_incr_fw(SBI_PMU_FW_SET_TIMER);
 
-	index = sbi_pmu_ctr_cfg_match(0, (1ULL << 35) - 1,
-		0, 0b11110000000000000010, 0);
+#if __riscv_xlen == 32
+    index = sbi_pmu_ctr_cfg_match(0, (~0UL),
+        0, 0b11110000000000000010, 0);
+#else
+    index = sbi_pmu_ctr_cfg_match(0, (1ULL << 35) - 1ULL,
+        0, 0b11110000000000000010, 0);
+#endif
 
 	sbi_pmu_ctr_start(0, 1 << index, 0, 0);
 	/**
@@ -179,7 +184,7 @@ void sbi_timer_process(void)
 
 	sbi_pmu_ctr_fw_read(index, &cval);
 	if (cval != 0)
-		sbi_printf("%ld\n", cval);
+		sbi_printf("%lld\n", (unsigned long long)cval);
 
 	uint64_t timer_interval = 10000000;
 	uint64_t next_event = sbi_timer_value() + timer_interval;
