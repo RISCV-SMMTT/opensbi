@@ -33,11 +33,21 @@ enum sbi_ext_test_fid {
     SBI_EXT_NAPOT_LEAF_BIT_L = 0x12,
     SBI_EXT_NAPOT_LEAF_BIT_N = 0x13,
     SBI_EXT_NAPOT_LEAF_G = 0x14,
+    SBI_EXT_BIT_VALID = 0x15,
+    SBI_EXT_MMPT_WARL = 0x16,
+    SBI_EXT_NON_LEAF_RESERVE = 0x17,
+    SBI_EXT_NON_NAPOT_LEAF_RESERVE = 0x18,
+    SBI_EXT_NAPOT_LEAF_RESERVE = 0x19,
+    SBI_EXT_MPT_PERM_REVISE = 0x1A,
+    SBI_EXT_PMP_DISALLOW = 0x1B,
+    SBI_EXT_SET_HART = 0xFD,
+    SBI_EXT_TEST_MEM_INIT = 0xFE,
+    SBI_EXT_DEBUG = 0xFF,
 };
 
 typedef union{
     mpt_entry_t mpt_entry_union;
-    uint64_t value;
+    unsigned long value;
 }mpt_entry_u;
 
 #if __riscv_xlen == 32
